@@ -1,0 +1,312 @@
+// Englsh. Inspired by how well CoffeeScript understands "Hello my name is Joe".
+// People seem to like PEG.js. Coffeescript is written in Jison.
+// Probably will use PEG.js and estree-to-js to convert to actual JS code.
+// That doesn't handle comments, but...
+// Editor: http://pegjs.org/online
+// Relevant: http://coffeescript.org/documentation/docs/grammar.html
+// CoffeeScript in PegCoffee: https://github.com/michaelficarra/CoffeeScriptRedux
+
+
+I want to eat a cookie.
+>
+function eat( ...args ) {
+
+}
+var I = { want: ( ( target ) => { if ( target instanceof cookie ) { eat.call( I, target ); } } ) };
+// Seems wrong, shouldn't that be from "I want is to eat a cookie"?, No "My want is...".
+// "I verb" is an action, usually... I.want( function eatACookie(){} );
+//
+
+// ---------
+to say a thing is to display "Something says " followed by the thing
+>
+function say( target ) {
+if ( typeof thing === 'undefined' ? true : ( target instanceof thing ) ) {
+  display( "Something says " + target );
+}
+}
+
+// -------
+to display something is to have the console log it
+>
+function display( target ) {
+document.log( target );
+}
+// ------
+
+Bob is a person with ten puppies.
+A puppy is an animal.
+A puppy's species is "Dog".
+Make all of Bob's animals say their species.
+>
+class person {
+constructor() {}
+}
+var Bob = new person();
+class animal {
+constructor() {}
+}
+class puppy extends animal {
+constructor() { super() }
+}
+puppy.prototype.species = "Dog";
+Bob.qualities = [ { type: puppy, quant: 10 } ];
+// Initialize all? Depends on puppy empty constructor or not.
+// Can initialize later if something happens to a particular puppy
+( Bob.qualities || [] ).forEach( x => {
+x.inst = new x.type;
+if ( x.inst instanceof animal ) {
+  for ( var i = 0; i < ( 'quant' in x ? x.quant : 1 ); i++ ) {
+    say.call(  /* unitialized */ null, x.inst.species );
+  }
+}
+} );
+// Some of the above needs re-thinking.
+
+// ----
+To beh is to say 'green'.
+Beh.
+To boh something is to say the thing if it's a string.
+Boh 'purple'.
+To bah is to beh and then boh 'green' and then boh 'orange' twice.
+Forget everything about boh.
+>
+function beh() {
+say( 'green' );
+}
+beh();
+function boh( target ) {
+if ( Object( target ) instanceof String ) {
+  say( target );
+}
+}
+boh( 'purple' );
+function bah() {
+beh();
+boh( 'green' );
+for ( let i = 0; i < 1; i++ ) {
+  boh( 'orange' );
+}
+}
+boh = function(){}; // Or maybe undefined? undefined, and then error "What's boh?" if used.
+
+//------
+
+// setters
+let subj (equal|=|be|be equal to) targ
+set subj (to be|to|as|=) targ
+make subj (equal|equal to|be|=|) targ
+subj (is|equals|is equal to|=) targ
+Have subj (be|equal|be equal to|=) Y
+Maybe: (Suppose|Assume) (that|) X (is|equals|is equal to|=) Y
+(Create|Build) subj as targ
+
+The problem with "Make X Y" is that it breaks variable names with spaces, ex:
+"Make Z 3, and Y Z 4. Make X Y Z." Is X = Y Z, or X Y = Z?
+Maybe pick one as favorable and use the other only when it doesn't make sense
+otherwise, but PEG doesn't have backtracking.
+
+"The X" = "X", unless an (otherwise anonymous) instanceof X was already mentioned.
+
+// Conditions, loops
+While X is Y, do Z.
+If X, then Y. Otherwise, Z.
+I think that "If X then Y" is too computer-y sounding. People tend to only use
+real conditions as conditions.
+
+// Constructors, prototypes, types
+Can things be more than one thing? "Beh is a Grunk. Beh is also a Groop. Is beh a grunk?"
+setter( subj, "a(n?) [class]")
+"a" is used differently in setting and comparing:
+X is a Y > let X = new Y;
+if X is a Y, spoo => if ( X instanceof Y ) { spoo(); }
+Probably: Capitalize classes by default:
+X is a foo: function Foo(){}; var X = new Foo();
+"The" can reference things.
+"Make a foo. Have the console log the foo."
+> var __recentFoo = new Foo(); console.log( lastFoo );
+Same with arguments.
+"To X a foo, have the console log the foo. Y a foo. X Y."
+
+// forget
+forget ((everything|all)?about)? targ
+
+// Error handlers
+What's targ?
+targ isn't a thing one can do.
+How do you do targ?
+
+// Props
+var's prop.
+X's Y
+Have/Make document's body appendChild the thing
+X's Y is 'green'.
+Unsure: X has a Y. Does X have a Y?
+> X.Y = ..., or X.has.add( Y );?
+
+// "Qualities?"
+X is green. Is X green?
+Options:
+* Set green to simple unique variable ({}, probably), and X = green;
+* green as unique and set 'qualities' prop to a set, so that this works:
+"X is green. X is yellow. Is X green?" >
+> X.quals.add( green = {} ); X.quals.add( yellow = {} ); X.quals.has( green );
+Also other setters: "Make X green.", "Let X be green."
+This could mess up some variable things... Alternatively, just require
+"X's color is green". Less fun.
+Or, require reset to be "X is green. X is now yellow.|Change X to yellow." or something.
+I'll start off with simple subj = targ, rework later if I feel like it.
+
+// "of"?
+Unsure. Some possible overlap between options. Possibles:
+The sum of x and y is x + y
+The X of Y is green. What's the X of Y?
+> Y.X = green; Y.X
+> X = () => green; X( Y )
+> ??
+
+// Actions/functions
+(To|To do) X (,)? (is to) Y
+Possibles: "the result of Xing Y", "Xing Y is when you Z"
+"Of", as above, for x => y type functions.
+running:
+X
+do X
+non-running is "to X". Maybe also "Xing", but I don't want to process language like that.
+
+For a X to Y, (the X should Z|(have|make|let) the X Z|...) > X.prototype.Y = function () { this.Z(); }
+
+To double something, multiply it by 2.
+
+Have the console log X and Y.
+
+Complicated functions, maybe?
+"To move something to the left, subtract 1 from it's X. Move Y to the left."
+> function moveToTheLeft( target ) { target.X--; }
+"To move something to the left by Z, subtract Z from it's X. Move Y to the left by 10."
+"...to the left Z..."
+> function moveToTheLeft( target, { by: Z } = {} ) { target.X -= Z; } moveToTheLeft( Y, 10 );
+"To move something to the left by a number, subtract the number from it's X. Move Y to the left by 10."
+> function moveToTheLeft( target, { by: anon_number } = {} ) {
+>   if( typeof anon_number === 'number' ) { target.X -= anon_number; }
+> }
+> moveToTheLeft( { by: Y }, 10 );
+Parse: To fnname thing ??? by|to|... ??, ACTION.
+"For something to move to the left, subtract 1 from it's X. Have Y move to the left by 10."
+"To have something move to..."
+> function moveToTheLeft() { this.X--; } moveToTheLeft.call( Y );
+
+To X a Y (call it "Z"), ...
+To count to a number, set the counter to 0, and while the counter is less than
+the number, increment the counter and have the console log the counter.
+"...have the console log it"?
+
+"To increment a group of numbers, make each of the numbers one more than before." // Maybe.
+
+How to order the arguments?
+Scenarios:  To X Y...,               To X by Y...                 To X Y by Z...                    To X Y Z
+Option 1: > function X( Y );         > function X( { by: Y } ); > function X( Y, { by: Z } );     > ...?
+Option 2: > function X( { "": Y } ); > function X( { by: Y } ); > function X( { "": Y, by: Z } ); >
+
+
+Return values...
+I don't want it to use "what you get when you". Need something better.
+X is what you get when you Y Z > X = Y( Z );
+Make X what you get when you Y Z > ^
+Set X to what you ... ^
+
+// .....
+Have document createElement "div"
+---Nope -> Have X be document doing createElement "div" // No, that would be a function.
+Have X be the result of document doing createElement on "div" // Ummm....
+- Zoom out. "Have/Make/Let Jim eat the cake" for Jim.eat( cake ) or eat.call( Jim, cake ); is okay, right?
+- How does that extend to results?
+
+
+// Error checking.
+X should equal Y. // X doesn't equal Y.
+X should be a Y. // etc.
+
+// Rules
+Object tend to be self-initializing, I think.
+X = green; > let green = {}; X = green;
+Functions sort-of "hoist".
+Ideally, everything is case insensitive, and ignores spaces as much as possible.
+Punctuation... I dunno.
+
+// Blocks
+I think I don't like significant spaces, but brackets kind of ruin the point here.
+To X, do A, B, C, and then D, and if x is y do z; also b if c.
+Commas, semicolons, and periods might be some kind of layering, but I want commas
+to be usually or always optional...
+To X, do the following: First, A. Then, B. Then, C. Eat some cookies. Spoo the fleem. Finally, eat a balloon.
+Layering also works: To X, do the following: First, A. Finally, while B, do the following: C. D. Finally, E.
+
+// Enumeration
+All of X's Ys should Z.
+Everything in X should Z.
+Z once for every X.
+
+// Operators
+/ Setters
+Subtract X from Y. | Make X Y less than before.
+Add Y to X.
+Increment X. (by Y)
+Multiply X by Y.
+Divide X by Y.
+/ Getters
+X minus Y
+X plus Y
+X (multiplied by|times) Y
+X (divided by|over) Y
+X is (greater|larger|higher|more) than Y
+X is (less|lower) than Y
+/ String
+X followed by Y
+/ Eq
+X is Y / X is the same as Y / X equals Y
+X isn't Y / X isn't the same as / X is different than Y / X doesn't equal Y
+(isn't = is not, doesn't = does not)
+
+// Value types
+String: word?, phrase?
+Number: number, amount, quantity
+Array: list, group
+Object: thing
+
+// Comments
+Unsure. Maybe "Note: ..." for single line comments?
+What about inside a line? Maybe "do stuff. Note: Something. Do more stuff." is
+until period, but "\nNote: Stuff. Some other stuff.\nDo thing." is until line
+break?
+"Notes:" might be useful for multiline notes, but I can't think of how to end
+a section.
+Notes: \n\ *\* WORDS \n\ *\* MORE WORDS \n(?!\ *\*)[end], that is, keep going
+until a line without an asterisk.
+Within a line, maybe use brackets. "Stuff. (Note: Thing.) More stuff."
+
+// Pronouns
+... I have no idea.
+Experiment: "Bob's dog's color is green, his size is 7, and his foo is bar. Bob's cat's size is 5."
+My cake is yummy. Do I have a cake?
+"The X" means both X and most-recently mentioned "a X" argument.
+
+Random extra utilities:
+...
+
+// Tests
+To count to a number, set the counter to 0, and then while the counter is less than the number, increment the counter and have the console log the counter.
+If 5 is less than 6, count to 10.
+Make me a sandwich.
+If me is a sandwich, do the following:
+  Have the console log "Why am I a sandwich?".
+  Then, make me a pickle.
+  Finally, have the console log "I am no longer a sandwich.".
+Sigh.
+Eat the cookie.
+Have Shlomo eat the sandwich and then wonder why you are inside a pickle.
+Tell Shlomo that he is secretly a pickle.
+Eat your eggs on a sandwich.
+Make sploo a object.
+Bob is a Shmo.
+If bob's balloon is yellow, explode.

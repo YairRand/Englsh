@@ -1,0 +1,29 @@
+<html>
+<body>
+  <style>
+    textarea { width: 49%; height: 70%; }
+    body { padding: 0; margin: 0; }
+  </style>
+  <textarea id="q"></textarea>
+  <textarea id="y"></textarea>
+  <div id="logarea"></div>
+  <script src="parser.js"></script>
+  <script src="astring.js"></script>
+  <script>
+    var q = document.querySelector( "#q" ),
+        y = document.querySelector( "#y" ),
+        logArea = document.querySelector( '#logarea' );
+    q.onkeyup = function () {
+      try {
+        var v = parser.parse( this.value );
+        y.value = astring( v, {
+          indent: '  ',
+          comments: true
+        } );
+        logArea.innerText = '';
+      } catch( e ) { y.value = "???"; logArea.innerText = e; }
+    }
+    q.focus();
+  </script>
+</body>
+</html>
