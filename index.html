@@ -3,16 +3,38 @@
   <style>
     textarea { width: 49%; height: 70%; }
     body { padding: 0; margin: 0; }
+    button { margin-left: 50%; }
   </style>
-  <textarea id="q"></textarea>
+  <textarea id="q">
+To count to a number, set the counter to 0, and then while the counter is less than the number, add 1 to the counter and have the console log it.
+If 5 is less than 6, count to 10.
+Make me a sandwich.
+If me is a sandwich, do the following:
+  Have the console log "Why am I a sandwich?".
+  Then, make me a pickle.
+  Finally, have the console log "I am no longer a sandwich.".
+Sigh.
+Eat the cookie.
+Make sploo an object.
+Bob is a Shmo.
+If bob's balloon is yellow, explode.
+
+To eat a cookie, do things, and then have the console log the cookie.
+If the document's firstChild exists, do this.
+The body is the document's body.
+While the body's firstChild exists, have the body removeChild the body's firstChild.
+
+Make a sandwich. Eat it.</textarea>
   <textarea id="y"></textarea>
+  <button>Run</button>
   <div id="logarea"></div>
   <script src="parser.js"></script>
   <script src="astring.js"></script>
   <script>
     var q = document.querySelector( "#q" ),
         y = document.querySelector( "#y" ),
-        logArea = document.querySelector( '#logarea' );
+        logArea = document.querySelector( '#logarea' ),
+        button = document.querySelector( 'button' );
     q.onkeyup = function () {
       try {
         var v = parser.parse( this.value );
@@ -21,9 +43,28 @@
           comments: true
         } );
         logArea.innerText = '';
-      } catch( e ) { y.value = "???"; logArea.innerText = e; }
+        button.disabled = false;
+      } catch( e ) {
+        y.value = "???";
+        button.disabled = true;
+        logArea.innerText = e;
+      }
     }
+    q.onkeyup();
     q.focus();
+    button.onclick = function () {
+      try {
+        eval( y.value );
+      } catch ( e ) {
+        var m, b = e.message;
+        if ( e instanceof TypeError ) {
+          m = "How do I " + b.match( /.+(?= is not)/) + "?";
+        } else if ( e instanceof ReferenceError ) {
+          m = "What is "  + b.match( /.+(?= is not)/ ) + "?";
+        }
+        logArea.innerText = m ? m + " (" + e + ")" : e;
+      }
+    }
   </script>
 </body>
 </html>

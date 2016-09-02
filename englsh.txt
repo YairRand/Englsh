@@ -118,15 +118,24 @@ real conditions as conditions.
 Can things be more than one thing? "Beh is a Grunk. Beh is also a Groop. Is beh a grunk?"
 setter( subj, "a(n?) [class]")
 "a" is used differently in setting and comparing:
-X is a Y > let X = new Y;
+X is a Y > let X = new Y();
 if X is a Y, spoo => if ( X instanceof Y ) { spoo(); }
 Probably: Capitalize classes by default:
 X is a foo: function Foo(){}; var X = new Foo();
 "The" can reference things.
 "Make a foo. Have the console log the foo."
-> var __recentFoo = new Foo(); console.log( lastFoo );
+> var __recentFoo = new Foo(); console.log( __recentFoo );
+Actually,
+> var foo = new Foo(); console.log( foo );
 Same with arguments.
 "To X a foo, have the console log the foo. Y a foo. X Y."
+
+"When creating a foo, ..."
+> function Foo() { ... }
+"A foo's bar is ..."
+> Foo.prototype.bar = ...
+"For a foo to bar, ..."
+> Foo.prototype.bar = function bar() {}
 
 // forget
 forget ((everything|all)?about)? targ
@@ -207,7 +216,8 @@ How to order the arguments?
 Scenarios:  To X Y...,               To X by Y...                 To X Y by Z...                    To X Y Z
 Option 1: > function X( Y );         > function X( { by: Y } ); > function X( Y, { by: Z } );     > ...?
 Option 2: > function X( { "": Y } ); > function X( { by: Y } ); > function X( { "": Y, by: Z } ); >
-
+Actually, nvm. Just have the parser remember the arguments, and use that order:
+To X Y by Z > X( Y, Z ){}, X by Z Y > X( Y, Z );
 
 Return values...
 I don't want it to use "what you get when you". Need something better.
@@ -295,7 +305,7 @@ Random extra utilities:
 ...
 
 // Tests
-To count to a number, set the counter to 0, and then while the counter is less than the number, increment the counter and have the console log the counter.
+To count to a number, set the counter to 0, and then so long as it is less than the number, add 1 to the counter and have the console log it.
 If 5 is less than 6, count to 10.
 Make me a sandwich.
 If me is a sandwich, do the following:
