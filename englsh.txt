@@ -113,6 +113,36 @@ While X is Y, do Z.
 If X, then Y. Otherwise, Z.
 I think that "If X then Y" is too computer-y sounding. People tend to only use
 real conditions as conditions.
+The X is Y if Z, or W otherwise.
+> x = z ? y : w;
+^ That'll take some doing.
+If X is a Y or a Z, do...
+If X is less than Y or equals Z, ...
+If X is a Y or...
+How do brackets work in ommited-subject condition groups?
+If X is Y and Z or W, ...
+if ( x === y && ( x === z || x === w ) ) { ...
+If X is Y and Z or X is W, ...
+if ( x === y && x === z || x === w ) { ...
+if ( ( x === y && x === z ) || x === w ) { ...
+If X is Y or Z and X is W
+
+
+Going with JS's "or" taking precedence over "and".
+Ideally, commas and maybe even semicolons could take the place, without
+messing everything else up (like the end of the if, especially post-ifs.)
+
+Groups
+Need to accept 'if x > a and < b or > c and < d', grouping the ands.
+Need to *also* accept 'if x > a and b or < c and d'
+'if x > a or b and < c and d'
+> if ( ( x > a || x > b ) && ( x < c || x < d ) )
+'if x exists and is a b and a c and is more than w and v'
+I am not adding 'if x or y is a z', because that sounds way too hard.
+Potential for ambiguity anyway:
+'if a > b and c and d > e'
+'if ( a > b and c ) and d > e'
+'if a > b and ( c and d > e )'
 
 // Constructors, prototypes, types
 Can things be more than one thing? "Beh is a Grunk. Beh is also a Groop. Is beh a grunk?"
@@ -173,6 +203,16 @@ The X of Y is green. What's the X of Y?
 > Y.X = green; Y.X
 > X = () => green; X( Y )
 > ??
+Going with functions with return values, I think:
+The X of a Y is Z. W is the X of V.
+> function x( y ) { return z; } w = x( v );
+The sum of a number called y and a number called z is y plus z.
+function sum( x, y ) { return x + y; }
+To get the X of a Y and a Z, do the following: b. c. make d 4. d is the X.
+Or "The X is D?"
+No, "That's the X", I think. Maybe allow both.
+Also, allow "If A, 1 is the X. Otherwise, 2 is the X.", but only end the
+function if all paths go to return values.
 
 // Actions/functions
 (To|To do) X (,)? (is to) Y
@@ -320,3 +360,15 @@ Eat your eggs on a sandwich.
 Make sploo a object.
 Bob is a Shmo.
 If bob's balloon is yellow, explode.
+
+The factorial of a number is 1 if the number is 0, and the number times the factorial of the number minus 1 otherwise.
+The factorial of a number (called "n") is 1 if n is 0, and otherwise n times the factorial of n minus 1.
+To get the factorial of a number, do the following: If the number is 0, 1 is the factorial. Otherwise, the factorial
+is the number times the factorial of the number minus 1.
+function factorial(n) {
+    if (n === 0) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+    // return n === 0 ? 1 : n * factorial( n - 1 );
+}

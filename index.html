@@ -7,9 +7,10 @@
   </style>
   <textarea id="q">
 To count to a number, set the counter to 0, and then while the counter is less than the number, add 1 to the counter and have the console log it.
-If 5 is less than 6, count to 10.
+If 5 is 2 plus 3 and less than 6 and 7, count to 10.
 Make me a sandwich.
 If me is a sandwich, do the following:
+  Note: The indentation here is optional.
   Have the console log "Why am I a sandwich?".
   Then, make me a pickle.
   Finally, have the console log "I am no longer a sandwich.".
@@ -35,19 +36,27 @@ Make a sandwich. Eat it.</textarea>
         y = document.querySelector( "#y" ),
         logArea = document.querySelector( '#logarea' ),
         button = document.querySelector( 'button' );
+    ( function () {
+      var log = console.log;
+      console.log = function ( x ) {
+        log.apply( console, arguments );
+        logArea.appendChild( document.createTextNode( x ) );
+        logArea.appendChild( document.createElement( 'br' ) );
+      }
+    } )();
     q.onkeyup = function () {
       try {
+        logArea.innerText = '';
         var v = parser.parse( this.value );
         y.value = astring( v, {
           indent: '  ',
           comments: true
         } );
-        logArea.innerText = '';
         button.disabled = false;
       } catch( e ) {
         y.value = "???";
         button.disabled = true;
-        logArea.innerText = e;
+        console.log( e );
       }
     }
     q.onkeyup();
@@ -62,7 +71,7 @@ Make a sandwich. Eat it.</textarea>
         } else if ( e instanceof ReferenceError ) {
           m = "What is "  + b.match( /.+(?= is not)/ ) + "?";
         }
-        logArea.innerText = m ? m + " (" + e + ")" : e;
+        console.log( m ? m + " (" + e + ")" : e );
       }
     }
   </script>

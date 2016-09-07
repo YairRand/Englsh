@@ -1,11 +1,15 @@
 // Lots copied from
 // https://github.com/pegjs/pegjs/blob/master/examples/javascript.pegjs
-// TODO: Notes, &&s, error handling, getting and setting return statements,
-// ...
+// TODO: error handling, ...
+//
 // Note for later: It technically is possible to modify earlier stuff, by
 // storing the JSON array/object and then modifying it in JS directly.
 // When updating the parser, remember to change the "module" stuff
 // to "parser".
+
+// I still have no plan for how to send functions as arguments.
+
+// TO CONSIDER: Add fancy array functions, like reduce and map.
 
 {
   function buildList(head, tail, index) {
@@ -44,32 +48,61 @@
   }
 
   function buildLetStatement( name, val ) {
-    var m = name.type === "MemberExpression";
-    var preDeclared = m || hasVar( name.name );
-    solidifyRemember( name );
-    if ( !preDeclared ) {
-      addVar( name.name );
-      return {
-        "type": "VariableDeclaration",
-        "declarations": [
-          {
-            "type": "VariableDeclarator",
-            "id":   name,
-            "init": val
-          }
-        ],
-        "kind": "var"
+    var m = name.type === "MemberExpression",
+      eReturn = getExpectedReturn();
+    // This can be either a var statement or a return statement.
+    if ( eReturn && ( name.name === eReturn || val.name === eReturn ) ) {
+      var returnValue = name.name === eReturn ? val : name;
+      returned = true;
+      return  {
+        "type": "ReturnStatement",
+        "argument": returnValue
       };
     } else {
-      return {
-         "type": "ExpressionStatement",
-         "expression": {
-            "type": "AssignmentExpression",
-            "operator": "=",
-            "left": name,
-            "right": val
-         }
-      };
+      // Var statement
+      var preDeclared = m || hasVar( name.name );
+      solidifyRemember( name );
+      if ( !preDeclared ) {
+        addVar( name.name );
+        return {
+          "type": "VariableDeclaration",
+          "declarations": [
+            {
+              "type": "VariableDeclarator",
+              "id":   name,
+              "init": val
+            }
+          ],
+          "kind": "var"
+        };
+      } else {
+        return buildExpressionStatement( {
+          "type": "AssignmentExpression",
+          "operator": "=",
+          "left": name,
+          "right": val
+        } );
+      }
+    }
+  }
+
+  function buildFunctionStatement( id, params, body, expression ) {
+    return {
+      "type": expression ? "FunctionExpression" : "FunctionDeclaration",
+      "id": id,
+      "params": params,
+      "body": {
+        "type": "BlockStatement",
+        //"body": flatten( s )
+        "body": body
+      }
+    };
+  }
+
+  function buildExpressionStatement( exp ) {
+    return {
+      "type": "ExpressionStatement",
+      "expression": exp
     }
   }
 
@@ -106,15 +139,34 @@
     return string;
   }
 
-  // TODO: Aliases (in contexts). Example:
-  // "When making an x, make the x's y z." "x" is alias for "this".
+
+
+  function logicBlock( type ) {
+    return function( left, right ) {
+      return {
+        "type": "LogicalExpression",
+        "operator": type,
+        "left": left,
+        "right": right
+      };
+    }
+  }
+  var orBlock  = logicBlock( '||' ),
+      andBlock = logicBlock( '&&' );
+
+  function andOrReduce( x ) {
+    return x.map( x => x.reduce( andBlock ) ).reduce( orBlock );
+  }
+
   var contextStack = [],
     // For pronouns
     lastUsed,
-    _lastUsed;
+    tempLastUsed,
+    returned = false;
+    // How to deal with if ( x ) { return y; } else { ...? }
 
-  function pushContext() {
-    contextStack.push( { vars: [], aliases: {} } );
+  function pushContext( options ) {
+    contextStack.push( { vars: [], aliases: {}, expectReturn: options && options.expectReturn } );
   }
   function popContext() {
     contextStack.pop();
@@ -140,15 +192,41 @@
     }
   }
   function maybeRemember( val ) {
-    _lastUsed = val;
+    tempLastUsed = val;
   }
   function solidifyRemember( val ) {
-    lastUsed = val || _lastUsed;
+    lastUsed = val || tempLastUsed;
   }
   function useLast() {
     return lastUsed;
   }
+  function getExpectedReturn() {
+    // .find not supported in IE.
+    //return contextStack.reverse().find( x => x.expectReturn );
+    // ----
+    for ( var i = contextStack.length - 1; i >= 0; i-- ) {
+      var expectReturn = contextStack[ i ].expectReturn;
+      if ( expectReturn ) {
+        return expectReturn;
+      }
+    }
+  }
+
+  function startFunction( options ) {
+    var TE = { "type": "ThisExpression" };
+    pushContext( options );
+    if ( options && options.thisAlias ) {
+      setAlias(
+        nonConstructorFormat( options.thisAlias.name ),
+        TE
+      );
+    }
+    solidifyRemember( options && options.rememberThis && TE );
+  }
+
   pushContext();
+
+
 }
 
 Program
@@ -168,143 +246,260 @@ SourceElements
     }
 
 SourceElement
-  = FullStatement // / Note
+  = FullSentence // / Note
 
 Block
-  = "do the following:" _ s:FullStatement+
-  _"Finally"i ","? ws ss:PhraseGroup {
-    return flatten( s.concat( ss ) );
+  = "do the following:"i _ NoteBlock*
+  ( "first"i ","? ws )? s:SentenceLevelStatement
+  ss:( !{ return returned; } EndFullSentence SentencePrefix SentenceLevelStatement )*
+  sss:(
+    & { return returned; } { return []; } /
+    EndFullSentence "Finally"i ","? ws sss:PhraseGroupGroup { return sss; }
+  )
+  {
+    return flatten( buildList( s, ss, 3 ).concat( sss ) );
   }
 
 // Capital to period.
-FullStatement
-  = (("First"i/"Then"i/"Next"i) ","? ws)?
-    (!"Finally"i)
-    s:(
-      FunctionStatement /
-      PrototypeFunction /
-      DefineConstructor /
-      PhraseGroup
-    ) _'.'_
+FullSentence
+  // TODO: Rework "Then"s so that they're only allowed when they make sense.
+  = SentencePrefix s:SentenceLevelStatement EndFullSentence
     { return s }
+
+SentencePrefix // TODO: Only allow each prefix where appropriate.
+  = ( ( "First"i / "Then"i / "Next"i ) ","? ws )?
+    ( !"Finally"i )
+
+SentenceLevelStatement
+  = FunctionStatement /
+    PrototypeFunction /
+    DefineConstructor /
+    DefineGetFunction /
+    DefineSimpleGetFunction /
+    PhraseGroupGroup
+
+EndFullSentence
+  = _ "." _ NoteBlock*
+
+PhraseGroupGroup
+  = s:PhraseGroup ss:( ( !{ return returned; } SemicolonAndThen ) PhraseGroup)* {
+    return flatten( buildList( s, ss, 1 ) );
+  }
 
 // Set of phrases, ex. as consequent or fn body.
 PhraseGroup
-  = s:Statement ss:(AndThen Statement)* {
+  = s:Statement ss:( ( !{ return returned; } CommaAndThen ) Statement)* {
     //return buildList( s, ss, 1 )
     return flatten( buildList( s, ss, 1 ) );
   }
 
-AndThen // At least of of: "," "and" "then"
-  = "," ws ("and" ws)? ("then" ","? ws)? /
-    ws "and" ws ("then" ","? ws)? /
-    ws "then" ","? ws
-
 // Fragment, single clause (and associated block if applicable).
 Statement
   = Block /
-    CreateStatement /
-    LetStatement /
+    NonBlockStatement
+
+NonBlockStatement
+  = LetStatement /
     IfStatement /
     WhileStatement /
     MathSetter /
     HaveOrder /
+    DoNothing /
     DoAction
 
+CommaAndThen // At least one of: "," "and" "then"
+  = "," ( PlainAndThen / ws ) /
+    PlainAndThen
+
+SemicolonAndThen // At least one of: ";" "and" "then"
+  = ";" ( PlainAndThen / ws ) /
+    PlainAndThen
+
+PlainAndThen
+  = ws "and" ws ("then" ","? ws)? /
+    ws "then" ","? ws
+
+// --- CONDITIONS ---
+
 Condition // In conditions, "is" means "===", "and" means "&&", etc.
-  = AndCheck / LogicCheck / Comparison / ValueTest
+  = ConditionOrExpression
 
-LogicCheck
-  = /*AndCheck /
-    OrCheck*/ 'oaoeueoa'
+ConditionOrExpression // cond or cond
+  = c:ConditionAndExpression cc:( ( ws "or" ws ) ConditionAndExpression )* {
+    return buildList( c, cc, 1 ).reduce( orBlock );
+  }
 
-AndCheck // If X is more than Y and less than Z and equals W.
-  = left:ValueTest ws 'and' ws right:Condition { return left; }
+ConditionAndExpression // cond and cond
+  = c:ConditionOrOp cc:( ( ws "and" ws ) ConditionOrOp )* {
+    return buildList( c, cc, 1 ).reduce( andBlock );
+  }
 
-OrCheck
-  = left:Condition ' and ' { return left; }
+ConditionOrOp
+  = left:Value c:ConditionAndOp cc:( ( ws "or" ) ConditionAndOp )* {
+    var u = buildList( c, cc, 1 );
+    return u.map( fn => fn( left ) ).reduce( orBlock );
+  }
 
-Comparison
-  = // typeof Primitive
-  left:Value (ws "is" ws a ws) type:PrimitiveType {
-    return {
-      "type": "BinaryExpression",
-      "operator": "===",
-      "left": {
-        "type": "UnaryExpression",
-        "operator": "typeof",
-        "argument": left,
-        "prefix": true
-      },
-      "right": {
-        "type": "Literal",
-        "value": type,
-        "raw": '"' + type + '"'
+ConditionAndOp
+  = c:ConditionPredicate cc:( ( ws "and" ) ConditionPredicate )* {
+    var u = buildList( c, cc, 1 );
+    return function ( left ) {
+      return u.map( fn => fn( left ) ).reduce( andBlock );
+    }
+  }
+
+ConditionPredicate // op right or right or op right or right
+    // COMPLICATED: Should allow "If X is Y or a Z or a number", combining types.
+  = ConditionIsKW ws rights:ConditionOrIsV {
+      return function ( left ) {
+        var conditions = rights.map( x => x.map( y => y( left ) ) );
+        return andOrReduce( conditions );
       }
     }
-  } / // Instanceof
-  left:Value (ws "is" ws a ws) type:SimpleId {
-    return {
-      "type": "BinaryExpression",
-      "operator": "instanceof",
-      "left": left,
-      "right": constructorFormat( type )
+  / op:ConditionMathOp rights:ConditionOrValue {
+      return function ( left ) {
+        var conditions = rights.map( x => x.map( right => op( left, right ) ) );
+        return andOrReduce( conditions );
+      }
     }
-  } /
-  MathComparison
+  / op:ConditionUnaryOp {
+      return function ( left ) {
+        return op( left );
+      }
+    }
 
-MathComparison
-  = left:Value op:MathCompareOp right:Value {
-    return {
-      "type": "BinaryExpression",
-      "operator": op,
-      "left": left,
-      "right": right
+ConditionIsKW
+  = ws "is"
+
+ConditionIsValue
+  = a ws type:PrimitiveType {
+    return function ( left ) {
+      return {
+        "type": "BinaryExpression",
+        "operator": "===",
+        "left": {
+          "type": "UnaryExpression",
+          "operator": "typeof",
+          "argument": left,
+          "prefix": true
+        },
+        "right": {
+          "type": "Literal",
+          "value": type,
+          "raw": '"' + type + '"'
+        }
+      };
+    }
+  } // Instanceof
+  / a ws type:( compositeLiteralType / SimpleId ) {
+    return function ( left ) {
+      return {
+        "type": "BinaryExpression",
+        "operator": "instanceof",
+        "left": left,
+        "right": constructorFormat( type )
+      };
+    };
+  }
+  // Remember to lookahead for ops, avoid the "x is more ...." > "x === more" problem.
+  / right:Value {
+    return function ( left ) {
+      return {
+        "type": "BinaryExpression",
+        "operator": "===",
+        "left": left,
+        "right": right
+      };
     };
   }
 
-MathCompareOp
-  = // TODO: For if x is more than y and less than z, remove "is" req.
-    ( ws "is" ws MathGreaterKeyword ws "than or equal" (ws "to")?
-        ws / _">="_ ) { return ">="; }
-  / ( ws "is" ws MathGreaterKeyword ws "than" ws / _">"_ ) { return ">"; }
-  / ( ws "is" ws MathLessKeyword    ws "than or equal" (ws "to")?
-        ws / _"<="_ ) { return "<="; }
-  / ( ws "is" ws MathLessKeyword    ws "than" ws / _"<"_ ) { return "<"; }
-  / ( ws ("equals"/"is equal to"/"is") ws / _"="_ ) { return "==="; }
+ConditionOrIsV
+  = right:ConditionAndIsV rights:( ( ws "or" ws ) ConditionAndIsV !ConditionOpLookahead )* {
+    return buildList( right, rights, 1 );
+  }
 
-/*
-MathCompareKeyword =
-  MathGreaterKeyword { return ">" } /
-  MathLessKeyword { return "<" }
-*/
-MathGreaterKeyword = "more" / "higher" / "greater" / "larger"
-MathLessKeyword = "less" / "lower"
+ConditionAndIsV
+  = right:ConditionIsValue rights:( ( ws "and" ws ) ConditionIsValue !ConditionOpLookahead )* {
+    return buildList( right, rights, 1 );
+  }
 
-MathSetter
-  = l:MathSetterBinaryOp { return {
-      "type": "ExpressionStatement",
-      "expression": {
-        "type": "AssignmentExpression",
-        "operator": l.op,
-        "left": l.s,
-        "right": l.v
-       }
-     }; }
-  / l:MathSetterUnaryOp  { return {
-      "type": "ExpressionStatement",
-      "expression": {
-        "type": "UpdateExpression",
-        "operator": l.op,
-        "argument": l.s,
-        "prefix": false
-       }
-     }; }
+ConditionOrValue // right or right
+  = right:ConditionAndValue rights:( ( ws "or" ws ) ConditionAndValue !ConditionOpLookahead )* {
+    return buildList( right, rights, 1 );
+  }
+
+ConditionAndValue // right and right
+  = right:Value rights:( ( ws "and" ws ) Value !ConditionOpLookahead )* {
+    return buildList( right, rights, 1 );
+  }
+
+ConditionOpLookahead
+  = ConditionMathOp / ConditionUnaryOp / ConditionIsKW
+
+ConditionMathOp // op
+  = op:MathCompareOp {
+    return function ( left, right ) {
+      return {
+        "type": "BinaryExpression",
+        "operator": op,
+        "left": left,
+        "right": right
+      };
+    }
+  }
+
+ConditionUnaryOp
+  = ws "exists" {
+      return function ( left ) {
+        return left;
+      }
+    }
+  / ws "doesn't exist" {
+      return function ( left ) {
+        return {
+          "type": "UnaryExpression",
+          "operator": "!",
+          "argument": left,
+          "prefix": true
+        };
+      };
+    }
+
 
 Expression
   = AdditiveExpression
 
+// --- MATH ---
+
+MathCompareOp
+  = ws ( "is" ws )? k:MathCompareKeyword ws "than"
+      e:( ws "or equal" ( ws "to" )? )? ws
+      { return k + ( e ? '=' : '' ); }
+  / _ o:$( [><]"="? ) _ { return o; }
+  / ( ws ("equals"/"is equal to"/"is the same as"/"is") ws / _"="_ )
+      { return "==="; }
+
+MathCompareKeyword
+  = ( "more" / "higher" / "greater" / "larger" ) { return ">" }
+  / ( "less" / "lower" ) { return "<" }
+
+// TODO: Move this somewhere else.
+MathSetter
+  = l:MathSetterBinaryOp { return buildExpressionStatement( {
+      "type": "AssignmentExpression",
+      "operator": l.op,
+      "left": l.s,
+      "right": l.v
+     } ); }
+  / l:MathSetterUnaryOp  { return buildExpressionStatement( {
+      "type": "UpdateExpression",
+      "operator": l.op,
+      "argument": l.s,
+      "prefix": false
+     } ); }
+
 MathSetterBinaryOp
+  // TODO: Allow PostIfs.
   // Maybe also allow "Make X Y more than before"? Would interfere with var.
   = ("Increment"i/"Increase"i) ws s:Setable ws "by" ws v:Value
       { return {s,v,op:"+="}; }
@@ -341,20 +536,19 @@ AdditiveOperator
   // force toString: x followed by y > '' + x + y;
   / "followed by" { return "+"; }
 
-ValueTest
-  = v:Value ws "exists" { return v; }
-  / v:Value ws "doesn't exist" { return {
-    "type": "UnaryExpression",
-    "operator": "!",
-    "argument": v,
-    "prefix": true
-  }; }
+// --- IF, WHILE ---
 
 IfStatement
   = "if"i ws test:Condition
     (", then" ws/"," ws) cblock:PhraseGroup
-    // The punctuation rules here should be stricter.
-    alt:( (("."/";"/",") _ "otherwise"i ","? ws) PhraseGroup )? {
+    ret:( !{} { var r = returned; returned = false; return r; } )
+    // TODO: The punctuation rules here should be stricter.
+    alt:( (("."/";"/",") _ "otherwise"i ","? ws) PhraseGroup )?
+  {
+    if ( !ret ) {
+      returned = false;
+    }
+
     return {
       type:       "IfStatement",
       test:       test,
@@ -384,57 +578,139 @@ WhileStatement // TODO: Reduce duplication with above
     }
   }
 
-DoAction
-  = ("do"i ws)?
-    //(!"if"i)
-    s:SimpleId arg:ArgGroup
-    // ( AndThen LetStatement )?
-    {
-      var f = {
-       "type": "ExpressionStatement",
-       "expression": {
-          "type": "CallExpression",
-          "callee": s,
-          "arguments": arg
-        }
-      };
-      return f;
-    }
+// --- VARIABLE ASSIGNMENT ---
 
 LetStatement
+  = st:( CreateCompositeLiteral / CreateStatement / VarStatement ) p:PostIf? {
+    return p ? p( st ) : st;
+  }
+
+VarStatement
   = l:(
     ( "let"i ws )  Setable
-      (ws ("equal"/"be equal to"/"be") ws/_"="_) Value /
+      (ws ("equal"/"be equal to"/"be") ws/_"="_) CValue /
     ( "make"i ws ) Setable
-      (ws ("equal"/"be equal to"/"equal to"/"be") ws/ws/_"="_) Value /
-    ( "set"i ws )  Setable (ws ("to be"/"to equal"/"to"/"as") ws) Value /
-    ( "have"i ws ) Setable (ws ("equal"/"be equal to"/"be") ws/"=") Value /
-    (_) Setable (ws ("equals"/"is equal to"/"is") ws/_"="_) Value
+      (ws ("equal"/"be equal to"/"equal to"/"be") ws/_"="_/ws) CValue /
+    ( "set"i ws )  Setable (ws ("to be"/"to equal"/"to"/"as") ws) CValue /
+    ( "have"i ws ) Setable (ws ("equal"/"be equal to"/"be") ws/"=") CValue /
+    (_) Setable (ws ("equals"/"is equal to"/"is") ws/_"="_) CValue
     ) {
     return buildLetStatement( l[ 1 ], l[ 3 ] );
   } / l:(
+    // No CValues here because it sounds silly.
     ( ("call"i/"name"i) ws ) Value ws Setable /
     ( ("call"i/"name"i) ws ) Value ( ws  [\"\'] ) Setable [\"\']
     ) {
     return buildLetStatement( l[ 3 ], l[ 1 ] );
   }
 
-FunctionStatement
-  = ("to do"i ws/"to"i ws) id:SimpleId args:ParamGroup (","ws/ws "is to"ws)
-  !{ pushContext(); solidifyRemember(); } s:PhraseGroup !{ popContext(); }
-  {
-  	return {
-       "type": "FunctionDeclaration",
-       "id": id,
-       "params": args,
-       "body": {
+CreateCompositeLiteral
+  = CreateKW a ws c:compositeLiteral id:CreateCalled? {
+      return buildLetStatement(
+        id || c.text,
+        c.init
+      );
+    }
+
+CreateStatement
+  = CreateKW c:Constructor id:CreateCalled? {
+      var name = c.callee.name;
+      return buildLetStatement(
+        id || buildIdentifier( nonConstructorFormat( name ) ),
+        c
+      );
+    }
+
+CreateKW
+  = ("Make"i/"Build"i/"Create"i/"Set up"i) ws
+
+CreateCalled
+  = ws "called" ws [\"\']? id:SimpleId [\"\']? { return id; }
+
+PostIf
+  = ws "if" ws test:Condition {
+    return function ( o ) {
+      returned = false;
+      return {
+        type:       "IfStatement",
+        test:       test,
+        consequent: {
           "type": "BlockStatement",
-          //"body": flatten( s )
-          "body": s
-       }
+          "body": [ o ]
+        },
+        alternate: null
+      }
     }
   }
 
+// --- DEFINING FUNCTIONS ---
+
+FunctionStatement
+  = ("to do"i ws/"to"i ws) id:SimpleId params:ParamGroup (","ws/ws "is to"ws)
+  !{ startFunction(); } s:PhraseGroup !{ popContext(); }
+  {
+    return buildFunctionStatement( id, params, s );
+  }
+
+DefineConstructor
+  = "When"i ws ("making"/"creating"/"building"/"setting up") ws
+  type:TypeEntity params:ParamGroupRequirePreposition "," ws
+  !{ startFunction( { thisAlias: type, rememberThis: true } ); }
+  s:PhraseGroup
+  !{ popContext(); } {
+    return buildFunctionStatement( constructorFormat( type ), params, s );
+  }
+
+PrototypeFunction
+  = type:(
+      "For"i ws type:TypeEntity ws "to" {return type; } /
+      "To have"i ws type:TypeEntity { return type; }
+    )
+  ws method:SimpleId params:ParamGroup "," ws
+  !{ startFunction( { thisAlias: type } ); }
+  s:PhraseGroup
+  !{ popContext(); }
+  {
+    var c = constructorFormat( type );
+    var q = buildExpressionStatement( {
+      "type": "AssignmentExpression",
+      "operator": "=",
+      "left": {
+        "type": "MemberExpression",
+        "object": {
+          "type": "MemberExpression",
+          "object": c,
+          "property": buildIdentifier( "prototype" ),
+          "computed": false
+        },
+        "property": method,
+        "computed": false
+      },
+      "right": buildFunctionStatement( method, params, s, true )
+    } );
+    return q;
+  }
+
+DefineGetFunction
+  = "to get"i ws id:Identifier ws "of" params:ParamGroupNoPreposition "," ws
+  !{ startFunction( { expectReturn: id.name } ); }
+  s:PhraseGroup
+  !{ popContext(); returned = false; }
+  {
+    return buildFunctionStatement( id, params, s );
+  }
+
+DefineSimpleGetFunction // Maybe solidifyRemember here.
+  = id:Identifier ws "of" args:ParamGroupNoPreposition ws "is" ws v:CValue
+  // Should args be remembered?
+  {
+    return buildFunctionStatement( id, args, [ {
+        "type": "ReturnStatement",
+        "argument": v
+    } ] );
+  }
+
+// - ARGUMENTS
 ParamGroup
   = s:( ( ws ArgPreposition / "" ) ( SingleParam ) )* {
     return extractList( s, 1 );
@@ -444,6 +720,11 @@ ParamGroup
 ParamGroupRequirePreposition
   = s:( ( ws ArgPreposition ) ( SingleParam ) )* {
     return extractList( s, 1 );
+  }
+
+ParamGroupNoPreposition
+  = s:SingleParam ss:( ( ( "," )? ws "and" / "," ) ( SingleParam ) )* {
+    return buildList( s, ss, 1 );
   }
 
 SingleParam
@@ -480,7 +761,7 @@ ParamNameCalled
       / ("shall"/"will") ws "be" ws ("called"/"referred to as")
     )
 
-ArgGroup // TODO: "X Y and Z", "of" statements.
+ArgGroup // TODO: "X Y and Z".
   = s:( ( ws ArgPreposition / "" ) ( SingleArg ) )* {
     return extractList( s, 1 );
   }
@@ -490,128 +771,104 @@ ArgGroupRequirePreposition // For constructors. Can't have "Make a X Y".
     return extractList( s, 1 );
   }
 
+ArgGroupNoPreposition
+  = s:SingleArg ss:( ( ( "," )? ws "and" / "," ) ( SingleArg ) )* {
+    return buildList( s, ss, 1 );
+  }
+
 SingleArg
   = ws !("and" ws) s:Value { return s }
 
 ArgPreposition
-  = ( "by" / "to" / "with" / "of" / "on" / "in" ) & ws
+  = ( "by" / "to" / "with" / "on" / "in" ) & ws
 
-CreateStatement
-  = ("Make"i/"Build"i/"Create"i/"Set up"i) ws c:Constructor
-  id:( ws "called" ws [\"\']? id:SimpleId [\"\']? { return id; } )?
-  {
-    var name = c.callee.name;
-    return buildLetStatement(
-      id || buildIdentifier( nonConstructorFormat( name ) ),
-      c
-    );
-  }
-
-DefineConstructor
-  = "When"i ws ("making"/"creating"/"building"/"setting up") ws
-  type:TypeEntity params:ParamGroupRequirePreposition "," ws
-  !{
-    var t = { "type": "ThisExpression" };
-    pushContext();
-    setAlias( nonConstructorFormat( type.name ), t );
-    solidifyRemember( t );
-  }
-  s:PhraseGroup
-  !{ popContext(); } {
-  	return {
-       "type": "FunctionDeclaration",
-       "id": constructorFormat( type ),
-       "params": params,
-       "body": {
-          "type": "BlockStatement",
-          "body": s
-       }
-    }
-  }
-
-PrototypeFunction
-  = type:(
-      "For"i ws type:TypeEntity ws "to" {return type;} /
-      "To have"i ws type:TypeEntity { return type; }
-    )
-  ws method:SimpleId args:ParamGroup "," ws
-  !{
-    var t = { "type": "ThisExpression" };
-    pushContext();
-    setAlias( nonConstructorFormat( type.name ), t );
-    solidifyRemember();
-  }
-  s:PhraseGroup
-  !{ popContext(); } {
-    // TODO
-    var c = constructorFormat( type );
-    var q = {
-      "type": "ExpressionStatement",
-      "expression": {
-        "type": "AssignmentExpression",
-        "operator": "=",
-        "left": {
-          "type": "MemberExpression",
-          "object": {
-            "type": "MemberExpression",
-            "object": c,
-            "property": buildIdentifier( "prototype" ),
-            "computed": false
-          },
-          "property": method,
-          "computed": false
-        },
-        "right": {
-          "type": "FunctionExpression",
-          "id": method,
-          "params": args,
-          "body": {
-            "type": "BlockStatement",
-            "body": s
-          }
-        }
-      }
-    };
-    return q;
-  }
-
+/*
 PrototypeValue // Is this really necessary?
   = type:TypeEntity "'s" ws prop:SimpleId
+*/
+
+// --- CALLING FUNCTIONS ---
+
+DoAction
+= ("do"i ws)?
+  s:SimpleId args:ArgGroup p:PostIf?
+  {
+    var f = buildExpressionStatement( {
+      "type": "CallExpression",
+      "callee": s,
+      "arguments": args
+    } );
+    return p ? p( f ) : f;
+  }
 
 HaveOrder
   = "Have"i ws id:Value ws method:SimpleId args:ArgGroup {
-    return {
-      "type": "ExpressionStatement",
-      "expression": {
-        "type": "CallExpression",
-        "callee": {
-          "type": "MemberExpression",
-          "object": id,
-          "property": method,
-          "computed": false
-        },
-        "arguments": args
-      }
-    };
+    return buildExpressionStatement( {
+      "type": "CallExpression",
+      "callee": {
+        "type": "MemberExpression",
+        "object": id,
+        "property": method,
+        "computed": false
+      },
+      "arguments": args
+    } );
   }
 
-TypeEntity
-  = a ws type:SimpleId { return type; }
+// Only for actually building.
+Constructor
+  = a ws id:SimpleId args:ArgGroupRequirePreposition { return {
+      "type": "NewExpression",
+      "callee": constructorFormat( id ),
+      "arguments": args
+    }; }
+
+// TODO: "Get X of Y, call it Z." "Get X of Y."
+
+CallGetFunction
+  = id:Identifier ws "of" args:ArgGroupNoPreposition { return {
+    "type": "CallExpression",
+    "callee": id,
+    "arguments": args
+  }; }
+
+DoNothing
+  = ( "do nothing"i / ( "don't"i / "do not"i ) ws Statement ) { return []; }
+
+// --- VALUES ---
+
+CValue
+  = ConditionalValue
+  / Value
 
 Value
   = Expression /
-    Literal /
-    PropGet /
-    Constructor /
-    Identifier /
-  	[a-z]+ { return  }
+    SimpleValue
 
-// Currently only used in Expressions themselves...
+// Currently only used in Expressions themselves, to prevent loops.
 SimpleValue
-  = Literal /
-    PropGet /
-    Constructor /
-    Identifier
+= CallGetFunction /
+  Literal /
+  PropGet /
+  CompositeLiteralConstructor /
+  Constructor /
+  Identifier
+
+ConditionalValue
+  = v:Value ws "if" ws c:Condition
+  ( ","? ws ( ( "and" / "or" ) ws )? / "," ws )
+  // TODO: Work for "or else"
+  av:( av:Value ws "otherwise" { return av; } / "otherwise" ws av:Value { return av; } )
+  {
+    return buildExpressionStatement( {
+      "type": "ConditionalExpression",
+      "test": c,
+      "consequent": v,
+      "alternate": av
+    } );
+  }
+
+// --- LITERALS ---
 
 Literal
   = v:(stringLiteral/numberLiteral) { return {
@@ -621,26 +878,7 @@ Literal
       raw: text()
     }; }
 
-// Only for actually building.
-Constructor
-  =
-  // Problem: These don't have callee.name, so "Make an array" doesn't work.
-  /*
-  a ws arrayLiteral { return {
-    "type": "ArrayExpression",
-    "elements": []
-  }; } /
-  a ws o:objectLiteral { return {
-    "type": "ObjectExpression",
-    "properties": []
-  }; } /
-  */
-  a ws id:SimpleId args:ArgGroupRequirePreposition { return {
-    "type": "NewExpression",
-    "callee": constructorFormat( id ),
-    "arguments": args
-  }; }
-
+// Literals and Primitive types
 stringLiteral
   // Line breaks being allowed is deliberate, as is lack of escape rules.
   = '"' s:([^"]*) '"' { return s.join(""); }
@@ -649,16 +887,43 @@ stringLiteral
 numberLiteral
   = s:$([0-9]+("."[0-9]+)?) { return parseFloat( s ); }
 
+compositeLiteral
+  = t:arrayLiteral  ![A-z_] { return { type: 'array', text: t, init: {
+      "type": "ArrayExpression",
+      "elements": []
+    } }; }
+  / t:objectLiteral ![A-z_] { return { type: 'object', text: t, init: {
+      "type": "ObjectExpression",
+      "properties": []
+    } }; }
+
+compositeLiteralType
+  = c:compositeLiteral { return buildIdentifier( c.type ); }
+
+CompositeLiteralConstructor
+  = a ws c:compositeLiteral { return c.init; }
+
 arrayLiteral
-  = "group" / "list" / "array"
+  = "group"i / "list"i / "array"i
 
 objectLiteral
-  = "thing" / "object"
+  = "thing"i / "object"i
+
+
+// --- TYPES ---
+
+a
+  = "a" ("n" "other"?)?
+
+TypeEntity
+  = a ws type:SimpleId { return type; }
 
 PrimitiveType = NumberType / StringType
 NumberType = ( "number" / "amount" / "quantity" ) { return "number"; }
 StringType = ( "string" / "sentence" / "phrase" / "word" / "text" )
   { return "string"; }
+
+// --- IDENTIFIERS, PROPERTIES ---
 
 Identifier
   //= [A-z _]+ {
@@ -670,14 +935,27 @@ Identifier
 
 SimpleId
   // For some reason, this is matching characters like "\".
-  = v:$([A-z_]+) {
-    return getAlias( v ) || buildIdentifier( nonConstructorFormat( v ) );
+  =
+  !(
+    ( "if"i / "do"i / "otherwise"i / "and"i / "or"i / "to"i / "make"i /
+      "have"i / "the"i / "get"i / "is"i / "doesn't" / "exist" / "exists" /
+      MathCompareKeyword / "equals" / "equal" / "as" / "same" )
+    ( [^A-z_] )
+  )
+  v:$([A-z_]+) {
+    var name = nonConstructorFormat( v );
+    return getAlias( name ) || buildIdentifier( name );
   }
+
+
+Pronoun
+  = ("it"i / "he"i / "she"i / "him"i / "her"i / "that"i) ![A-z]
+      { return useLast(); }
 
 PropGet
   = outer:(
       outer:Identifier "'s" { return outer } /
-      PPronoun { return useLast(); }
+      PossessivePronoun { return useLast(); }
     )
     _ inner:( PropGet / SimpleId )
   {
@@ -699,10 +977,7 @@ PropGet
     };
   }
 
-Pronoun
-  = ("it"i / "he"i / "she"i / "him"i / "her"i) ![A-z] { return useLast(); }
-
-PPronoun
+PossessivePronoun
   = ( "its"i / "his"i / "her"i / "their"i ) ![A-z]
 
 Setable = Pronoun / PropGet / Identifier
@@ -712,16 +987,18 @@ AccessIdent // Unused
   // Actually, more like !{ check all variables and stuff }
   = [A-z_ ]+ & { x = arguments; } { return arguments; }
 
-/*
-Note
-  = ("Note:" [^\n]+ / "Notes:" (.!("\n" _ [^*] ))+ ) { return [] }
-*/
+// --- WHITESPACE, COMMENTS ---
 
-a
-  = "a" ("n" "other"?)?
+// - Comments
+InlineNote
+  = "(Note:"i [^\)]+ ")"
 
+NoteBlock
+  = "Note"i "s"? ":" [^\n]+ ( _ "*" [^\n]+ )* _
+
+// - Whitespace
 ws
-  = ([ \t\n\r]/"(Note:" [^\)]+ ")")+
+  = ( [ \t\n\r] / InlineNote )+
 
 _ "whitespace"
-  = [ \t\n\r]*
+  = ( [ \t\n\r] / InlineNote )*
