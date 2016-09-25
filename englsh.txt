@@ -6,6 +6,12 @@
 // Relevant: http://coffeescript.org/documentation/docs/grammar.html
 // CoffeeScript in PegCoffee: https://github.com/michaelficarra/CoffeeScriptRedux
 
+// TODO: Read this: http://lisperator.net/pltut/
+// Or maybe not.
+// Read this: https://github.com/estools/escodegen. May allow for sourceMaps and comments and stuff.
+// And possibly this? https://github.com/ternjs/acorn
+// (Cough.) https://github.com/mozilla/source-map
+// https://hacks.mozilla.org/2013/05/compiling-to-javascript-and-debugging-with-source-maps/
 
 I want to eat a cookie.
 >
@@ -30,7 +36,7 @@ if ( typeof thing === 'undefined' ? true : ( target instanceof thing ) ) {
 to display something is to have the console log it
 >
 function display( target ) {
-document.log( target );
+  document.log( target );
 }
 // ------
 
@@ -44,10 +50,10 @@ constructor() {}
 }
 var Bob = new person();
 class animal {
-constructor() {}
+  constructor() {}
 }
 class puppy extends animal {
-constructor() { super() }
+  constructor() { super() }
 }
 puppy.prototype.species = "Dog";
 Bob.qualities = [ { type: puppy, quant: 10 } ];
@@ -271,11 +277,20 @@ Have document createElement "div"
 Have X be the result of document doing createElement on "div" // Ummm....
 - Zoom out. "Have/Make/Let Jim eat the cake" for Jim.eat( cake ) or eat.call( Jim, cake ); is okay, right?
 - How does that extend to results?
+- How to distinguish > x = y; from > x.y(); ?
+"X should Y".
+Maybe: "Cause X to Y", "X"
 
 
-// Error checking.
-X should equal Y. // X doesn't equal Y.
-X should be a Y. // etc.
+// TODO: Error checking and assertions.
+- X should equal Y.
+> assert( x !== y );
+- X should be a Y.
+> assert( x instanceof y );
+- It should be X.
+> ??? (console.assert()?)
+* This can be DISTINCT the following, which could be a "have" synonym:
+- X should Y.
 
 // Rules
 Object tend to be self-initializing, I think.
@@ -283,6 +298,7 @@ X = green; > let green = {}; X = green;
 Functions sort-of "hoist".
 Ideally, everything is case insensitive, and ignores spaces as much as possible.
 Punctuation... I dunno.
+- Update: Didn't end up doing this. Not sure whether that made sense.
 
 // Blocks
 I think I don't like significant spaces, but brackets kind of ruin the point here.
@@ -331,9 +347,11 @@ until period, but "\nNote: Stuff. Some other stuff.\nDo thing." is until line
 break?
 "Notes:" might be useful for multiline notes, but I can't think of how to end
 a section.
-Notes: \n\ *\* WORDS \n\ *\* MORE WORDS \n(?!\ *\*)[end], that is, keep going
-until a line without an asterisk.
+-Notes: \n\ *\* WORDS \n\ *\* MORE WORDS \n(?!\ *\*)[end], 
+that is, keep going until a line without an asterisk.
 Within a line, maybe use brackets. "Stuff. (Note: Thing.) More stuff."
+Idea: ", so that ..."
+(Maybe even have everything in brackets be comments.)
 
 // Pronouns
 ... I have no idea.
@@ -354,9 +372,6 @@ If me is a sandwich, do the following:
   Finally, have the console log "I am no longer a sandwich.".
 Sigh.
 Eat the cookie.
-Have Shlomo eat the sandwich and then wonder why you are inside a pickle.
-Tell Shlomo that he is secretly a pickle.
-Eat your eggs on a sandwich.
 Make sploo a object.
 Bob is a Shmo.
 If bob's balloon is yellow, explode.
@@ -372,3 +387,89 @@ function factorial(n) {
     return n * factorial(n - 1);
     // return n === 0 ? 1 : n * factorial( n - 1 );
 }
+
+
+
+TO CONSIDER: Add fancy array functions, like reduce and map.
+* Some of these might be difficult. How to distinguish "Add x to the group"
+  between "group += x" and "group.push( x )"? Don't want to try to type-check,
+  that would probably be impossible.
+  Need a different way of phrasing it.
+TODO: Class inheritance.
+
+// TODO: Return values.
+NOTE: It is still simply impossible to create DOM.
+TODO: FIX. I need to think more about return values in general and what they mean.
+
+- A-syntax: Use "a" args for return values.
+To bake a cake, eat, and then 3 is the cake. (the cake is three?)
+I guess this is dependant on the "a cake" never being used, or on the return statement being there?
+Have the document createElement "div" a div. The div...
+Have the document createElement a div with "div". The div...
+- B is the result of having x y.
+- B is the result of doing x.
+Now UNSURE about "a" for returns plan.
+Are there any situations in which setting an arg to something would be 
+necessary? Maybe just allow "a"-style returns as the last value? That's still
+prevents returns in if-blocks.
+Also, prevents passing immediately-created objects as args. For example,
+"X a Y." would need to become "Create a Y and X it." Very inconvenient for
+"simple rules" stuff.
+
+- To say a number, make the number "I say" followed by the number, and have the
+  console log it.
+Hm. Unsure whether that would actually be used.
+Does A-syntax directly imply banning setting arguments?
+- To ..., make the x equal x times 2.
+
+Additional point: Even if we wanted to return the arg, we might want to set it first:
+- To bake a cake, make the cake an object, set its...., .
+(Assumed return.)
+To follow the "assumed" model, if the last statement is an arg-let, replace it
+with a return statement.
+OPTION: Return the arg, but don't make setting it a "cut-off".
+Can be overridden by explicit "result" returns.
+PROBLEM: This breaks the previous model:
+- To createElement a div (with)? a string, foo the string, the div is ...
+- createElement 'div' a div / - createElement a div 'div'.
+Which argument gets returned?
+For that matter, is it an actual argument?
+
+Correct:
+> createElement = ( string ) => div
+Incorrect:
+> createElement = ( div, string ) => string
+> createElement = 
+Assumed-model returns break this.
+
+Option: Distinguish preposition-based arguments.
+- To createElement a div with a string, foo the string, make the div a foo, ...
+> function createElement( string ) { foo( string ); var div = new Foo(); ... return div; }
+- createElement a div with 'div'.
+> var div = createElement( "div" );
+
+
+- "Result" syntax:
+Also allow?: X the result of doing Y. / X's Y is the result of doing Z.
+PROBLEM: "Doing" doesn't fit grammatically here. "...result of doing bake"?
+"Having", however, does work, I think.
+Factory functions, simpler returns...
+X, and call the result "N".
+- Have the document createElement "div", and make div the result.
+I also kind of want this to be possible, but I'm not sure how hard it would be:
+- Have the document createElement "div", and call it "div".
+"result", "outcome", maybe "return value".
+TODO: Split "CallIt", to allow "the result".
+
+// TODO: (Maybe.) QUESTIONS:
+- Is it more than X? If so, Y. Otherwise, Z.
+> if ( it > x ) { y(); } else { z(); }
+Other questions work like simple assertions:
+- Is X Y?
+> englsh_ask( x === y );
+Unsure about prefixing.
+
+// TODO: PARSING ERROR HANDLING:
+* A "broken" line needs to return something, and then pass the line.
+* ... Actually, maybe not. The whole "expecting ..." is useful. Hm.
+* Is there a way to grab that anyway?

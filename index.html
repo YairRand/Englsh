@@ -1,20 +1,46 @@
 <html>
 <body>
   <style>
-    textarea { width: 49%; height: 70%; }
+    textarea {
+      width: 49%; 
+      height: 70%;
+      font-size: 13px;
+      line-height: 15px;
+      background: transparent;
+      z-index: 2;
+    }
     body { padding: 0; margin: 0; }
     button { margin-left: 50%; }
+    .highlighter {
+      position: absolute;
+      z-index: 1;
+      background: red;
+      height: 13px;
+      width: 4px;
+      display: none;
+    }
   </style>
-  <textarea id="q">
+  <div class="highlighter"></div>
+  <textarea id="q">When creating a sandwich, make its tastiness "delicious".
+
+Notes: 
+* All indentations are optional.
+* Also all line breaks, except for those surrounding full-line notes/comments.
+* Periods at the ends of sentences are mandatory.
+
 To count to a number, set the counter to 0, and then while the counter is less than the number, add 1 to the counter and have the console log it.
-If 5 is 2 plus 3 and less than 6 and 7, count to 10.
+
+The sum of a number (which we'll call "x") and another number (call it "y") is
+  x plus y.
+
+If 5 is 2 plus the sum of 1 and 2 and less than 6 and 7,
+  count to 10.
 Make me a sandwich.
 If me is a sandwich, do the following:
-  Note: The indentation here is optional.
   Have the console log "Why am I a sandwich?".
   Then, make me a pickle.
   Finally, have the console log "I am no longer a sandwich.".
-Sigh.
+
 Eat the cookie.
 Make sploo an object.
 Bob is a Shmo.
@@ -31,11 +57,15 @@ Make a sandwich. Eat it.</textarea>
   <div id="logarea"></div>
   <script src="parser.js"></script>
   <script src="astring.js"></script>
+  <script src="source-map.js"></script>
+  <script src="escodegen.js"></script>
   <script>
+    // x=escodegen.generate( { type: 'Literal', value: 40, loc: { start: { line: 5, column: 5 } } }, { sourceMap:'q.js',sourceMapWithCode:true} );
     var q = document.querySelector( "#q" ),
         y = document.querySelector( "#y" ),
         logArea = document.querySelector( '#logarea' ),
-        button = document.querySelector( 'button' );
+        button = document.querySelector( 'button' ),
+        code;
     ( function () {
       var log = console.log;
       console.log = function ( x ) {
@@ -44,14 +74,50 @@ Make a sandwich. Eat it.</textarea>
         logArea.appendChild( document.createElement( 'br' ) );
       }
     } )();
+    
+    // map = h.map; or mm below.
+    // position = { line: 1, column: 0 }
+    // returns { source, line, column }; of Englsh source.
+    function lookupPosition( map, position ) {
+      var u = new sourceMap.SourceMapConsumer( map.toString() );
+      return u.originalPositionFor( position );
+    }
+    function highlight( position ) {
+      
+      //var elem = document.querySelector( '.highlighter' );
+      var c = q.value, line = 1, index = 0, len, range, rect;
+      for ( ; line < position.line; line++ ) {
+        index = q.value.indexOf( '\n', index ) + 1;
+      }
+      index += position.column - 1;
+      len = c.substr( index ).search( /[^A-z]|$/ );
+      q.selectionStart = index;
+      q.selectionEnd = index + len;
+      q.focus();
+      // ranges don't work for textareas.
+      /*
+      range = window.getSelection().getRangeAt( 0 );
+      if ( range ) {
+        rect = range.getBoundingClientRect();
+        elem.style.top = rect.top + 'px';
+        elem.style.left = rect.right + 'px';
+        console.log( elem, rect );
+      }
+      */
+    }
+    
     q.onkeyup = function () {
       try {
         logArea.innerText = '';
         var v = parser.parse( this.value );
-        y.value = astring( v, {
-          indent: '  ',
-          comments: true
+        
+        code = escodegen.generate( v, { 
+          sourceMap:'q.js', 
+          sourceMapWithCode: true,
+          format: { indent: { style: '    ' } }
         } );
+        var map = code.map;
+        y.value = code.code;
         button.disabled = false;
       } catch( e ) {
         y.value = "???";
@@ -63,15 +129,28 @@ Make a sandwich. Eat it.</textarea>
     q.focus();
     button.onclick = function () {
       try {
-        eval( y.value );
+        eval( code.code );
       } catch ( e ) {
         var m, b = e.message;
+        if ( e.stack ) {
+          var errorLocation = e.stack.match( /(\d+):(\d+)\)\n/ );
+          if ( errorLocation ) {
+            var [ , line, column ] = errorLocation;
+            window.eel = lookupPosition( code.map, { line, column } );
+            highlight( eel );
+            console.log( eel, errorLocation, e );
+          }
+        };
         if ( e instanceof TypeError ) {
-          m = "How do I " + b.match( /.+(?= is not)/) + "?";
+          // Uncaught TypeError: foo is not a [function/whatever]
+          // Uncaught TypeError: Cannot read property 'foo' of [null/undefined/...]
         } else if ( e instanceof ReferenceError ) {
           m = "What is "  + b.match( /.+(?= is not)/ ) + "?";
+          // Other times...
+          // m = "How do I " + b.match( /.+(?= is not)/) + "?";
         }
         console.log( m ? m + " (" + e + ")" : e );
+        console.error( e );
       }
     }
   </script>
