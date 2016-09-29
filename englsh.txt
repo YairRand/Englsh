@@ -1,3 +1,5 @@
+Assorted notes and stuff.
+
 // Englsh. Inspired by how well CoffeeScript understands "Hello my name is Joe".
 // People seem to like PEG.js. Coffeescript is written in Jison.
 // Probably will use PEG.js and estree-to-js to convert to actual JS code.
