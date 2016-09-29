@@ -13,6 +13,8 @@
 // (Cough.) https://github.com/mozilla/source-map
 // https://hacks.mozilla.org/2013/05/compiling-to-javascript-and-debugging-with-source-maps/
 
+// TODO: Read https://en.wikipedia.org/wiki/Object_(grammar)
+
 I want to eat a cookie.
 >
 function eat( ...args ) {
@@ -156,12 +158,10 @@ setter( subj, "a(n?) [class]")
 "a" is used differently in setting and comparing:
 X is a Y > let X = new Y();
 if X is a Y, spoo => if ( X instanceof Y ) { spoo(); }
-Probably: Capitalize classes by default:
+Capitalize classes by default:
 X is a foo: function Foo(){}; var X = new Foo();
 "The" can reference things.
 "Make a foo. Have the console log the foo."
-> var __recentFoo = new Foo(); console.log( __recentFoo );
-Actually,
 > var foo = new Foo(); console.log( foo );
 Same with arguments.
 "To X a foo, have the console log the foo. Y a foo. X Y."
@@ -174,7 +174,8 @@ Same with arguments.
 > Foo.prototype.bar = function bar() {}
 
 // forget
-forget ((everything|all)?about)? targ
+- forget ((everything|all)?about)? targ
+> delete targ;
 
 // Error handlers
 What's targ?
@@ -250,6 +251,8 @@ Parse: To fnname thing ??? by|to|... ??, ACTION.
 "For something to move to the left, subtract 1 from it's X. Have Y move to the left by 10."
 "To have something move to..."
 > function moveToTheLeft() { this.X--; } moveToTheLeft.call( Y );
+"Create a person with the firstname 'Bob'."
+> var person = new Person( 'Bob' );
 
 To X a Y (call it "Z"), ...
 To count to a number, set the counter to 0, and while the counter is less than
@@ -265,20 +268,49 @@ Option 2: > function X( { "": Y } ); > function X( { by: Y } ); > function X( { 
 Actually, nvm. Just have the parser remember the arguments, and use that order:
 To X Y by Z > X( Y, Z ){}, X by Z Y > X( Y, Z );
 
-Return values...
+// Return values.
 I don't want it to use "what you get when you". Need something better.
 X is what you get when you Y Z > X = Y( Z );
 Make X what you get when you Y Z > ^
 Set X to what you ... ^
 
+A-syntax: Use "a" args for return values.
+- To bake a cake, eat, and then make the cake a thing. 
+** Should also allow "3 is the cake"? No, that would break "x is cake" for non-returns.
+
+Whether something's an argument or a returned value depends on whether the first
+use of it is a setter or a getter. In x = x + y, the getter runs first.
+- Have the document createElement "div" a div. The div...
+- Have the document createElement a div with "div". The div...
+Distinguish preposition-based arguments, which can't be returns.
+Slight issue with current syntax: This prevents passing immediately-created 
+objects as args. For example, "X a Y." would need to become 
+"Create a Y and X it." or "X with a Y.". Very inconvenient for "simple rules" 
+stuff. Probably worth it, though.
+A-returns can be overridden by explicit "result" returns.
+
+- To createElement a div with a string, foo the string, make the div a bar, ...
+> function createElement( string ) { foo( string ); var div = new Bar(); ... return div; }
+- createElement a div with 'div'.
+> var div = createElement( "div" );
+(This currently breaks to to Constructor issues.)
+
+Result syntax: (TODO)
+- B is the result of having x y.
+- B is the result of doing x.
+
+PROBLEM: "Doing" doesn't fit grammatically here. "...result of doing bake"?
+"Having", however, does work, I think.
+Factory functions, simpler returns...
+X, and call the result "N".
+- Have the document createElement "div", and make div the result.
+I also kind of want this to be possible, but I'm not sure how hard it would be:
+- Have the document createElement "div", and call it "div".
+"result", "outcome", maybe "return value".
+TODO: Split "CallIt", to allow "the result".
+
 // .....
-Have document createElement "div"
----Nope -> Have X be document doing createElement "div" // No, that would be a function.
 Have X be the result of document doing createElement on "div" // Ummm....
-- Zoom out. "Have/Make/Let Jim eat the cake" for Jim.eat( cake ) or eat.call( Jim, cake ); is okay, right?
-- How does that extend to results?
-- How to distinguish > x = y; from > x.y(); ?
-"X should Y".
 Maybe: "Cause X to Y", "X"
 
 
@@ -397,79 +429,28 @@ TO CONSIDER: Add fancy array functions, like reduce and map.
   Need a different way of phrasing it.
 TODO: Class inheritance.
 
-// TODO: Return values.
-NOTE: It is still simply impossible to create DOM.
-TODO: FIX. I need to think more about return values in general and what they mean.
-
-- A-syntax: Use "a" args for return values.
-To bake a cake, eat, and then 3 is the cake. (the cake is three?)
-I guess this is dependant on the "a cake" never being used, or on the return statement being there?
-Have the document createElement "div" a div. The div...
-Have the document createElement a div with "div". The div...
-- B is the result of having x y.
-- B is the result of doing x.
-Now UNSURE about "a" for returns plan.
-Are there any situations in which setting an arg to something would be 
-necessary? Maybe just allow "a"-style returns as the last value? That's still
-prevents returns in if-blocks.
-Also, prevents passing immediately-created objects as args. For example,
-"X a Y." would need to become "Create a Y and X it." Very inconvenient for
-"simple rules" stuff.
-
-- To say a number, make the number "I say" followed by the number, and have the
-  console log it.
-Hm. Unsure whether that would actually be used.
-Does A-syntax directly imply banning setting arguments?
-- To ..., make the x equal x times 2.
-
-Additional point: Even if we wanted to return the arg, we might want to set it first:
-- To bake a cake, make the cake an object, set its...., .
-(Assumed return.)
-To follow the "assumed" model, if the last statement is an arg-let, replace it
-with a return statement.
-OPTION: Return the arg, but don't make setting it a "cut-off".
-Can be overridden by explicit "result" returns.
-PROBLEM: This breaks the previous model:
-- To createElement a div (with)? a string, foo the string, the div is ...
-- createElement 'div' a div / - createElement a div 'div'.
-Which argument gets returned?
-For that matter, is it an actual argument?
-
-Correct:
-> createElement = ( string ) => div
-Incorrect:
-> createElement = ( div, string ) => string
-> createElement = 
-Assumed-model returns break this.
-
-Option: Distinguish preposition-based arguments.
-- To createElement a div with a string, foo the string, make the div a foo, ...
-> function createElement( string ) { foo( string ); var div = new Foo(); ... return div; }
-- createElement a div with 'div'.
-> var div = createElement( "div" );
-
-
-- "Result" syntax:
-Also allow?: X the result of doing Y. / X's Y is the result of doing Z.
-PROBLEM: "Doing" doesn't fit grammatically here. "...result of doing bake"?
-"Having", however, does work, I think.
-Factory functions, simpler returns...
-X, and call the result "N".
-- Have the document createElement "div", and make div the result.
-I also kind of want this to be possible, but I'm not sure how hard it would be:
-- Have the document createElement "div", and call it "div".
-"result", "outcome", maybe "return value".
-TODO: Split "CallIt", to allow "the result".
-
-// TODO: (Maybe.) QUESTIONS:
+// TODO: QUESTIONS:
 - Is it more than X? If so, Y. Otherwise, Z.
 > if ( it > x ) { y(); } else { z(); }
 Other questions work like simple assertions:
 - Is X Y?
 > englsh_ask( x === y );
-Unsure about prefixing.
+Unsure about prefixing. Maybe just this:
+> assert( x === y );
 
 // TODO: PARSING ERROR HANDLING:
 * A "broken" line needs to return something, and then pass the line.
 * ... Actually, maybe not. The whole "expecting ..." is useful. Hm.
 * Is there a way to grab that anyway?
+
+// TODO: Things that still can't be done:
+> x[ 0 ] = y;
+> Object.freeze( x );
+> setTimeout( () => {}, 1000 );
+> x = Symbol();
+> x = [ 1, 2 ]; x = new Array( 1, 2 ); // compositeLiteral doesn't take args.
+> 
+
+// TODO: Things that parse weirdly:
+- Have x constructor
+> x.Object()
