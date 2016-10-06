@@ -17,6 +17,8 @@ Assorted notes and stuff.
 
 // TODO: Read https://en.wikipedia.org/wiki/Object_(grammar)
 
+// Note: Look into Lobrow
+
 I want to eat a cookie.
 >
 function eat( ...args ) {
@@ -255,6 +257,10 @@ Parse: To fnname thing ??? by|to|... ??, ACTION.
 > function moveToTheLeft() { this.X--; } moveToTheLeft.call( Y );
 "Create a person with the firstname 'Bob'."
 > var person = new Person( 'Bob' );
+
+For defining functions, using definite objects is fine as they have no other
+purpose ("To X the Y, ..."), but for calling them it conflicts with normal
+arguments ("X the Y."). Problem.
 
 To X a Y (call it "Z"), ...
 To count to a number, set the counter to 0, and while the counter is less than

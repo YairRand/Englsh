@@ -861,25 +861,45 @@ LetStatement
     return p( st );
   }
 
+// Lotsa duplication here, but I can't figure out any other way to do this.
 VarStatement
   = l:(
-      ( "let"i ws )  Setable
-        (ws ("equal"/"be equal to"/"be") ws/_"="_) CValue /
-      ( "make"i ws ) Setable
-        (ws ("equal"/"be equal to"/"equal to"/"be") ws/_"="_/ws) CValue /
-      ( "set"i ws )  Setable (ws ("to be"/"to equal"/"to"/"as") ws) CValue /
-      ( "have"i ws ) Setable (ws ("equal"/"be equal to"/"be") ws/"=") CValue /
-      (_) Setable (ws ("equals"/"is equal to"/"is") ws/_"="_) CValue
+      ( "let"i ws ) 
+        Setable EqualKW CValue
+          ( And Setable EqualKW CValue )* /
+      ( "make"i ws ) 
+        Setable ( ws ( "equal to" ) ws / EqualKW / ws ) CValue
+          ( And Setable ( ws ( "equal to" ) ws / EqualKW / ws ) CValue )* /
+      ( "set"i ws ) 
+        Setable ( ws ( "to be" / "to equal" / "to" / "as" ) ws ) CValue
+          ( And Setable ( ws ( "to be" / "to equal" / "to" / "as" ) ws ) CValue )* /
+      ( "have"i ws ) 
+        Setable EqualKW CValue
+          ( And Setable EqualKW CValue )* /
+      (_) Setable ( ws ( "equals" / "is equal to" / "is" ) ws / _"="_ ) CValue
     ) {
-      return buildLetStatement( l[ 1 ], l[ 3 ] );
+      
+      return [ 
+        [ l[ 1 ], l[ 3 ] ], 
+        ...( l[ 4 ] || [] ).map( x => [ x[ 1 ], x[ 3 ] ] ) 
+      ].map( x =>
+        buildLetStatement( x[ 0 ], x[ 1 ] )
+      );
     }
   / ( "let's"i ws )? l:(
       // No CValues here because it sounds silly.
+      // TODO Maybe: "Call x y and z q."
       ( ( "call"i / "name"i ) ws ) Value ws Setable /
       ( ( "call"i / "name"i ) ws ) Value ( ws  [\"\'] ) Setable [\"\']
     ) {
       return buildLetStatement( l[ 3 ], l[ 1 ] );
     }
+
+EqualKW
+  = ws ( "equal" / "be equal to" / "be" ) ws / _ "=" _
+
+And
+  = ( ws "and" ws ) !Keyword
 
 CreateCompositeLiteral
   = ( CreateKW / "there"i ( ws "is" / "'s" ) ) ws a ws c:compositeLiteral id:CreateCalled? {
@@ -943,7 +963,7 @@ FunctionStatement
 DefineConstructor
   = type:(
       ( ( "When"i ws CreatingKW / "To"i ws CreateKW ) ws type:TypeEntity { return type; } ) /
-      ( "When"i ws type:TypeEntity ws "is" ws CreatedKW { return type; } )
+      ( ( "When"i / "Every time"i ) ws type:TypeEntity ws "is" ws CreatedKW { return type; } )
     )
     params:ParamGroupRequirePreposition "," ws
     !{ startFunction( { thisAlias: type, rememberThis: true } ); }
@@ -1383,8 +1403,9 @@ RawSimpleId
 
 Keyword
   = ( IfKW / WhileKW / "do"i / "otherwise"i / "and"i / "or"i / "to"i / "make"i /
-      "have"i / "the"i / "get"i / "is"i / "doesn't" / "exist" / "exists" /
-      MathCompareKeyword / "equals" / "equal" / "as" / "same" / "for"i
+      "have"i / "set"i / "the"i / "get"i / "is"i / "doesn't" / "exist" / 
+      "exists" / MathCompareKeyword / "equals" / "equal" / "as" / "same" / 
+      "for"i / "then"i
     )
 
 Pronoun
@@ -1430,7 +1451,11 @@ InlineNote
   = "(Note"i ( ":" / " that" ) [^\)]+ ")"
 
 NoteBlock
-  = "Note"i "s"? ":" [^\n]* ( _ "*" [^\n]+ )* _
+  = "Note"i "s"? ":" [^\n]* ( _ NoteBlockPoint )* _
+  / ( _ NoteBlockPoint )+ _
+
+NoteBlockPoint
+  = "*" [^\n]+
 
 // - Whitespace
 WordBreak
