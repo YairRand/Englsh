@@ -193,6 +193,9 @@ Have/Make document's body appendChild the thing
 X's Y is 'green'.
 Unsure: X has a Y. Does X have a Y?
 > X.Y = ..., or X.has.add( Y );?
+// TODO:
+- Have X do the following. B. C. Finally, D.
+> x.b(); x.c(); x.d();
 
 // "Qualities?"
 X is green. Is X green?
@@ -283,7 +286,7 @@ Make X what you get when you Y Z > ^
 Set X to what you ... ^
 
 A-syntax: Use "a" args for return values.
-- To bake a cake, eat, and then make the cake a thing. 
+- To bake a cake, eat, and then make the cake a thing.
 ** Should also allow "3 is the cake"? No, that would break "x is cake" for non-returns.
 
 Whether something's an argument or a returned value depends on whether the first
@@ -291,9 +294,9 @@ use of it is a setter or a getter. In x = x + y, the getter runs first.
 - Have the document createElement "div" a div. The div...
 - Have the document createElement a div with "div". The div...
 Distinguish preposition-based arguments, which can't be returns.
-Slight issue with current syntax: This prevents passing immediately-created 
-objects as args. For example, "X a Y." would need to become 
-"Create a Y and X it." or "X with a Y.". Very inconvenient for "simple rules" 
+Slight issue with current syntax: This prevents passing immediately-created
+objects as args. For example, "X a Y." would need to become
+"Create a Y and X it." or "X with a Y.". Very inconvenient for "simple rules"
 stuff. Probably worth it, though.
 A-returns can be overridden by explicit "result" returns.
 
@@ -380,6 +383,40 @@ Number: number, amount, quantity
 Array: list, group
 Object: thing
 
+// TODO: Arrays
+// Idea:
+- The squiggles are the numbers 5, 6, and 7.
+- Make the squiggles these numbers: 5, 6, and 7.
+- Let the squiggles equal the following: 5, 6, and 7.
+> var squiggles = [ 5, 6, 7 ];
+
+- If [all/every one] of the squiggles are more than 4, x.
+- If the squiggles are all more than 4, x.
+> if ( squiggles.every( _ => _ > x ) ) { x(); }
+
+- The squiggles are a group containing 1.
+> squiggles = [ 1 ];
+- Make the 3rd of the squiggles 9.
+> squiggles[ 2 ] = 9;
+- If most of the squiggles are less than 4, x.
+> if ( squiggles.reduce( ( x, y ) => x + ( y < 4 ? 1 : -1 ), 0 ) > 0 ) { x(); }
+> if ( squiggles.reduce( ( x, y ) => x + ( y < 4 || -1 ), 0 ) > 0 ) { x(); }
+// ISSUE: Groups like this are treated as Sets in normal language. Maybe use as set.
+// Problem (?) with that: That would end positioning.
+// Maybe use arrays as pseudo-sets, checking for .includes before .push-ing.
+Array.pushUnique = Array.pushUnique || function ( x ) {
+  return this.includes( x ) || this.push( x );
+};
+//
+- Make x the number of squiggles that are greater than 5.
+> x = squiggles.filter( x => x > 5 ).length;
+- For each of the squiggles, x.
+> squiggles.forEach( x );
+- Add 5 to each of the squiggles.
+> squiggles = squiggles.map( x => x + 5 );
+
+// Also consider: To x some squiggles...
+
 // Comments
 Unsure. Maybe "Note: ..." for single line comments?
 What about inside a line? Maybe "do stuff. Note: Something. Do more stuff." is
@@ -387,7 +424,7 @@ until period, but "\nNote: Stuff. Some other stuff.\nDo thing." is until line
 break?
 "Notes:" might be useful for multiline notes, but I can't think of how to end
 a section.
--Notes: \n\ *\* WORDS \n\ *\* MORE WORDS \n(?!\ *\*)[end], 
+-Notes: \n\ *\* WORDS \n\ *\* MORE WORDS \n(?!\ *\*)[end],
 that is, keep going until a line without an asterisk.
 Within a line, maybe use brackets. "Stuff. (Note: Thing.) More stuff."
 Idea: ", so that ..."
@@ -457,8 +494,17 @@ Unsure about prefixing. Maybe just this:
 > setTimeout( () => {}, 1000 );
 > x = Symbol();
 > x = [ 1, 2 ]; x = new Array( 1, 2 ); // compositeLiteral doesn't take args.
-> 
+>
 
 // TODO: Things that parse weirdly:
 - Have x constructor
 > x.Object()
+- A cookie is a thing.
+> cookie.prototype = Object.create(Thing.prototype); // Should be Object.create(Object.prototype);
+- If x doesn't equal 5 or 8, x.
+> if ( x !== 5 || x !== 8 ) { x(); } // Should be &&
+
+// Uncategorized random ideas:
+// Maybe:
+- When the user clicks on x, y.
+> user = { clicks: ( t, f ) => { var c = new Promise( ( resolve ) => f() ); t.onclick = c.resolve(); } }; user.clicks( x )

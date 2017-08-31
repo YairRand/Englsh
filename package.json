@@ -1,0 +1,21 @@
+{
+  "name": "Englsh",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "mocha",
+    "prepublish": "pegjs -o parser.js --format es englsh.pegjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YairRand/Englsh.git"
+  },
+  "devDependencies": {
+    "@std/esm": "^0.5.0",
+    "escodegen": "^1.8.1",
+    "mocha": "^3.5.0",
+    "pegjs": "git+https://github.com/pegjs/pegjs.git"
+  },
+  "@std/esm": {
+    "esm": "js"
+  }
+}

@@ -2,7 +2,7 @@
 <body>
   <style>
     textarea {
-      width: 49%; 
+      width: 49%;
       height: 70%;
       font-size: 13px;
       line-height: 15px;
@@ -23,7 +23,7 @@
   <div class="highlighter"></div>
   <textarea id="q">When creating a sandwich, make its tastiness "delicious".
 
-Notes: 
+Notes:
 * All indentations are optional.
 * Also all line breaks, except for those surrounding full-line notes/comments.
 * Periods at the ends of sentences are mandatory.
@@ -60,16 +60,20 @@ To make a person with a firstname and a lastname, make the person's firstname th
 For a person to say a sentence, have the console log his firstname followed by " says: " followed by the sentence.
 Create a person with the firstname "Chumble" and the lastname "Spuzz", which we'll call "ChumblePerson".
 When making a balloon, make its color "yellow", and have ChumblePerson inflate the balloon.
-For a person to inflate something, have him say "fwooosh".
+For a person to inflate something, have him say "fooof fooof fooof".
 Make a balloon.</textarea>
   <textarea id="y"></textarea>
   <button>Run</button>
   <div id="logarea"></div>
-  <script src="parser.js"></script>
-  <script src="astring.js"></script>
+  <!--<script src="parser.js"></script>-->
+  <!--<script src="astring.js"></script>-->
   <script src="source-map.js"></script>
   <script src="escodegen.js"></script>
-  <script>
+  <script type="module">
+    //console.log(321)
+    import * as parser from "./parser.js";
+    window.parse = parser.parse;
+    console.log(parser);
     // x=escodegen.generate( { type: 'Literal', value: 40, loc: { start: { line: 5, column: 5 } } }, { sourceMap:'q.js',sourceMapWithCode:true} );
     var q = document.querySelector( "#q" ),
         y = document.querySelector( "#y" ),
@@ -84,7 +88,7 @@ Make a balloon.</textarea>
         logArea.appendChild( document.createElement( 'br' ) );
       }
     } )();
-    
+
     // map = h.map; or mm below.
     // position = { line: 1, column: 0 }
     // returns { source, line, column }; of Englsh source.
@@ -93,7 +97,7 @@ Make a balloon.</textarea>
       return u.originalPositionFor( position );
     }
     function highlight( position ) {
-      
+
       //var elem = document.querySelector( '.highlighter' );
       var c = q.value, line = 1, index = 0, len, range, rect;
       for ( ; line < position.line; line++ ) {
@@ -115,14 +119,14 @@ Make a balloon.</textarea>
       }
       */
     }
-    
+
     q.onkeyup = function () {
       try {
         logArea.innerText = '';
         var v = parser.parse( this.value );
-        
-        code = escodegen.generate( v, { 
-          sourceMap:'q.js', 
+
+        code = escodegen.generate( v, {
+          sourceMap:'q.js',
           sourceMapWithCode: true,
           format: { indent: { style: '    ' } }
         } );
