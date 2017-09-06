@@ -1365,6 +1365,91 @@ stringLiteral
 
 numberLiteral
   = s:$([0-9]+("."[0-9]+)?) { return parseFloat( s ); }
+  / stringNumber
+
+// Numbers
+// TODO: Fractions, maybe 'point ...', uh... Also, condense this.
+// Maybe also allow commas after things like thousands.
+stringNumber
+  = stringNumberBaseThousandPlus
+  / "zero" { return 0; }
+
+stringNumbersGroupUnit
+  = t:( stringNumbersTeen / stringNumbersBaseOne ) ( '-' / ws ) { return t; }
+  / 'a' ws { return 1; }
+
+stringNumbersBaseOne
+  = t:( 'one'i / 'two'i / 'three'i / 'four'i / 'five'i / 'six'i / 'seven'i
+    / 'eight'i / 'nine'i
+  ) {
+    return ( 'one|two|three|four|five|six|seven|eight|nine'
+      ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 1;
+  }
+
+stringNumbersTeen
+  = t:( 'ten'i / 'eleven'i / 'twelve'i / 'thirteen'i / 'fourteen'i / 'fifteen'i
+    / 'sixteen'i / 'seventeen'i / 'eighteen'i / 'nineteen'i
+  ) {
+    return ( 'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen' +
+        '|eighteen|nineteen'
+      ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 10;
+  }
+
+stringNumbersBaseTen
+  = t:( 'twenty'i / 'thirty'i / 'forty'i / 'fifty'i / 'sixty'i / 'seventy'i
+    / 'eighty'i / 'ninety'i
+  ) o:( ( '-' / ' ' ) stringNumbersBaseOne )? {
+    return ( 'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety'
+      .split( '|' ).indexOf( t.toString().toLowerCase() ) + 2 ) * 10 +
+      ( o ? o[ 1 ] : 0 );
+  }
+  / stringNumbersTeen
+  / stringNumbersBaseOne
+
+
+stringNumbersBaseHundred
+  = u:stringNumbersGroupUnit 'hundred' t:( ( ws 'and' ws / '-' / ws ) stringNumbersBaseTen )? {
+    return u * 100 + ( t ? t[ 1 ] : 0 );
+  }
+  / stringNumbersBaseTen
+
+stringNumberBaseThousandPlus
+  = u:( h:stringNumbersBaseHundred ws { return h; } / stringNumbersGroupUnit )
+  base:(
+      'thousand' { return 1000; }
+    / s:( s:(
+        'm'i / 'b'i / 'tredec'i / 'tr'i / 'quadr'i / 'quint'i / 'sex'i /
+        'sept'i / 'oct'i / 'non'i / 'dec'i / 'undec'i / 'duodec'i
+      ) {
+          return Math.pow( 1000, (
+            'm|b|tr|quadr|quint|sex|sept|oct|non|dec|undec|duodec|tredec'
+          .split( '|' ).indexOf( s.toString().toLowerCase() ) + 2 ) );
+      } )
+      'illion' { return s; }
+  )
+  t:( ( ws 'and' ws / '-' / ws ) stringNumberBaseThousandPlus )? {
+    if ( t && t[ 1 ] ) {
+      if ( t > base ) {
+        // ERROR. TODO.
+      }
+    }
+    return u * base + ( t ? t[ 1 ] : 0 );
+  }
+  / stringNumbersBaseHundred
+
+// TODO. Use ordinal grouping. Maybe use together with the "next" things, and "slots".
+// WIP.
+stringNumberFraction
+  = 'half' { return 0.5; }
+  / 'quarter' { return 0.25; }
+
+stringNumberOrdinalBaseOne
+  = t:( 'first'i / 'second'i / 'third'i / 'fourth'i / 'fifth'i / 'sixth'i
+      / 'seventh'i / 'eight'i / 'nineth'i
+  ) {
+    return ( 'first|second|third|fourth|fifth|sixth|seventh|eighth|nineth'
+      ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 1;
+  }
 
 compositeLiteral
   = t:arrayLiteral  WordBreak { return { type: 'array', text: t, init: {
@@ -1411,17 +1496,17 @@ Identifier
     return v;
   }
 
-SimpleId
+SimpleId // Should these accept numbers in non-initial characters?
   // For some reason, this is matching characters like "\".
-  = !( Keyword ( [^A-z_] / !. ) )
-    v:$([A-z_]+) {
+  = !( Keyword ( [^A-Za-z_] / !. ) )
+    v:$([A-Za-z_]+) {
       var name = nonConstructorFormat( v );
       return getAlias( name ) || buildIdentifier( name );
     }
 
 RawSimpleId
-  = !( Keyword ( [^A-z_] / !. ) )
-    v:$([A-z_]+) {
+  = !( Keyword ( [^A-Za-z_] / !. ) )
+    v:$([A-Za-z_]+) {
       var name = nonConstructorFormat( v );
       return buildIdentifier( name );
     }
@@ -1484,7 +1569,7 @@ NoteBlockPoint
 
 // - Whitespace
 WordBreak
-  = ![A-z_]
+  = ![A-Za-z_]
 
 ws
   = ( [ \t\n\r] / InlineNote )+

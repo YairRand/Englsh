@@ -153,6 +153,20 @@ describe( 'Variables', function() {
         //'Make a thing named x. Her y is z.',
       ]
     },
+    'should support English numbers': {
+      'var x = 101 + 2;': [
+        'X is one hundred and one plus two.',
+        'Make X equal a hundred and one plus two.',
+        'Make X equal one-hundred one plus two.'
+      ],
+      'var x = 2018 / 111;': [
+        'X is two-thousand and eighteen over one hundred eleven.'
+      ],
+      'var x = 1345 * 0;': [
+        'X is thirteen hundred and forty-five times zero.',
+        'X equals one thousand three hundred forty-five multiplied by zero.'
+      ]
+    }
   } );
 
 } );
