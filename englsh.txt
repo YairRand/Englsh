@@ -387,7 +387,7 @@ Object: thing
 // Idea:
 - The squiggles are the numbers 5, 6, and 7.
 - Make the squiggles these numbers: 5, 6, and 7.
-- Let the squiggles equal the following: 5, 6, and 7.
+- Let the squiggles equal the following: 5, 6, and 7. (Maybe? Use "the following" as KW.)
 > var squiggles = [ 5, 6, 7 ];
 
 - If [all/every one] of the squiggles are more than 4, x.
@@ -405,7 +405,7 @@ Object: thing
 // Problem (?) with that: That would end positioning.
 // Maybe use arrays as pseudo-sets, checking for .includes before .push-ing.
 Array.pushUnique = Array.pushUnique || function ( x ) {
-  return this.includes( x ) || this.push( x );
+  return ( this.includes( x ) || this.push( x ) ), x;
 };
 //
 - Make x the number of squiggles that are greater than 5.
@@ -414,8 +414,11 @@ Array.pushUnique = Array.pushUnique || function ( x ) {
 > squiggles.forEach( x );
 - Add 5 to each of the squiggles.
 > squiggles = squiggles.map( x => x + 5 );
-
+- Have each/every one of the squiggles do the following: X, y, and z, and if it is more than 3, w.
+> squiggles.forEach( _ => { _.x(); _.y(); _.z(); if ( _ > 3 ) { [_.]?w(); } } ); // Maybe?
 // Also consider: To x some squiggles...
+- These are the squiggles: 1, 2, and 3.
+> squiggles = [ 1, 2, 3 ];
 
 // Comments
 Unsure. Maybe "Note: ..." for single line comments?
@@ -489,7 +492,6 @@ Unsure about prefixing. Maybe just this:
 * Is there a way to grab that anyway?
 
 // TODO: Things that still can't be done:
-> x[ 0 ] = y;
 > Object.freeze( x );
 > setTimeout( () => {}, 1000 );
 > x = Symbol();
@@ -508,3 +510,15 @@ Unsure about prefixing. Maybe just this:
 // Maybe:
 - When the user clicks on x, y.
 > user = { clicks: ( t, f ) => { var c = new Promise( ( resolve ) => f() ); t.onclick = c.resolve(); } }; user.clicks( x )
+
+// ", which", "hereafter", "a new"
+// "X a y, which we'll call z."
+// Notes: Sequential vars exist in: "Make/Call X Y", "X Y Z", ...
+// DOING: groups, maybe cmdline/readme, greater ordinals
+// Maybe get rid of the "Eat [the number] five."
+// TODO: Don't have pronouns persist outside of scope. Ex. args after function end.
+// "To roll the dice, " > function rollTheDice() { ...
+// Maybe todo eventually: "Settling Englnd" toy.
+// "Make one of the cities a new city, which we'll call X."
+- "We're dealing with these things: The X, the y, and the z."
+> var x, y, z;

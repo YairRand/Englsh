@@ -438,9 +438,6 @@
 // --- START PARSER ---
 
 Program
-  = Body
-
-Body
   = Header? body:SourceElements? {
       return {
         type: "Program",
@@ -452,7 +449,7 @@ Body
 Header
   = _ NoteBlock?
 
-// Maybe merge this into Body?
+// Maybe merge this into Program? Or maybe leave it to deal with dependencies?
 SourceElements
   = head:SourceElement tail:(_ SourceElement _)* {
       return flatten( buildList(head, tail, 1) );
@@ -756,7 +753,7 @@ WhileStatement
     return ifWhileBlock( term, test, cblock );
   }
 
-Otherwise
+Otherwise // TODO, maybe: "If not", for otherwise.
   = (
     ( ( "." / ";" / "," )? ws ( "and" / "or" ) ws / ( "." / ";" / "," ) ws )
     "otherwise"i
@@ -780,6 +777,7 @@ QuestionIfBlock
 
 // TODO: Grammar. This currently doesn't work, bc Condition requires, ex.
 // "Is X is Y?" "Does X is equal to Y?"
+// Related to the issue with contractions ("it's", etc.).
 QuestionIf
   = "Is"i ws test:Condition "?" { return test; }
   / "Does"i ws test:Condition "?" { return test; }
@@ -829,8 +827,11 @@ QuestionIntIfIts
   }
 
 QuestionIntIfOtherwise
-  = "if"i ws ( "it's not" / "it isn't" ) ws "any of" ws
-    ( "them" / ( "those" / "these" / "the above" ) " options"? )
+  = (
+        "if"i ws ( "it's not" / "it isn't" ) ws "any of" ws
+        ( "them" / ( "those" / "these" / "the above" ) ( ws "options" )? )
+      / "otherwise"i
+    )
     cblock:ThenPhrase EndFullSentence {
       return {
         "type": "SwitchCase",
@@ -900,19 +901,34 @@ VarStatement
   / ( "let's"i ws )? l:(
       // No CValues here because it sounds silly.
       // TODO Maybe: "Call x y and z q."
+      // TODO: Merge the first parts of these lines outside of l?
       ( ( "call"i / "name"i ) ws ) Value ws Setable /
-      ( ( "call"i / "name"i ) ws ) Value ( ws  [\"\'] ) Setable [\"\']
+      ( ( "call"i / "name"i ) ws ) Value ws QuotableIdentifier /
+      ( "refer"i ws "to"i ws ) Value ( ws "as"i ws ) QuotableIdentifier
     ) {
       return buildLetStatement( l[ 3 ], l[ 1 ] );
     }
-  // TODO. WIP.
-  // Intended to be: "The squiggles are the numbers x, y, and z."
-  / (_) s:Setable ( ws "are" ws ( "the following" / "these" ws ) )
-      vals:ArgGroup
-       {
-      return buildLetStatement( s, {
+    // ARRAY CONSTRUCTION
+  / s:(
+        ( ( "these"i / "the following"i ) ws "are"i ws ) Setable ( ":" ws )
+      / (_) s:Setable ( ws "are" ws
+          ( (
+              ( "the following"i / "these"i )
+            / a ws arrayLiteral ws "containing"i
+          ) ":"? ws )?
+        )
+    )
+    vals:(
+      first:Value
+      middle:( "," ws v:Value { return v; } )*
+      last:( ","? And last:Value { return last; } )?
+      {
+        return [ first ].concat( middle, last || [] );
+      }
+    ) {
+      return buildLetStatement( s[ 1 ], {
         "type": "ArrayExpression",
-        "elements": []
+        "elements": vals
       } )
     }
 
@@ -926,7 +942,7 @@ And
 CreateCompositeLiteral
   = ( CreateKW / "there"i ( ws "is" / "'s" ) ) ws a ws c:compositeLiteral id:CreateCalled? {
       return buildLetStatement(
-        id || c.text,
+        id || buildIdentifier( c.text ),
         c.init
       );
     }
@@ -950,9 +966,9 @@ CreatingKW
 CreatedKW
   = "made"i / "built"i / "created"i / "set up"i / "constructed"i
 
-CreateCalled // TODO: Merge with Called.
+CreateCalled // " which we'll call X". TODO: Merge with Called.
   = ( ","?  ws Called )
-    ws [\"\']? id:SimpleId [\"\']? { return id; }
+    ws id:QuotableIdentifier { return id; }
 
 
 Called // Related: CallIt
@@ -1166,15 +1182,15 @@ ParamName
   {
     return id;
   }
-  / ws Called ws [\"\']? id:Identifier [\"\']? {
+  / ws Called ws id:QuotableIdentifier {
     return id;
   }
-  / ws "(" _ Called ws [\"\']? id:Identifier [\"\']? _ ")" {
+  / ws "(" _ Called ws id:QuotableIdentifier _ ")" {
     return id;
   }
 
 CallIt
-  = ( "call it" / "refer to it as" ) ws [\"\']? id:Identifier [\"\']? {
+  = ( "call it" / "refer to it as" ) ws id:QuotableIdentifier {
     return id;
   }
 
@@ -1186,7 +1202,11 @@ ArgGroup // TODO: "X Y and Z".
     var r = call || false;
     // TODO: Fix the "X a Y with Z" bug. SingleArg calls Constructor which
     // swallows prep arguments.
-    r = r || ( s.varBind ? s.args.splice( s.args.indexOf( s.varBind ), 1 )[ 0 ].callee : false );
+    // (Is this^ fixed?)
+
+    //r = r || ( s.varBind ? s.args.splice( s.args.indexOf( s.varBind ), 1 )[ 0 ].callee : false );
+    var aBound = s.varBind && s.args.splice( s.args.indexOf( s.varBind ), 1 )[ 0 ].callee;
+    r = r || aBound;
     return {
       varBind: x => r ?
         buildLetStatement( nonConstructorFormat( r ), x ) :
@@ -1262,8 +1282,8 @@ DoAction
     return p( args.varBind( f ) );
   }
 
-CallItVar
-  = ( CommaAndThen id:CallIt { return id; } )?
+CallItVar // "CreateCalled" doesn't really fit for non-a situations here...
+  = ( CommaAndThen id:CallIt { return id; } / CreateCalled )?
 
 HaveOrder
   = id:(
@@ -1354,6 +1374,7 @@ Literal
       "type": "Literal",
       value: v,
       // astring requires this. It's not part of the estree spec.
+      // TODO: Fix this for English number literals.
       raw: text()
     }; }
 
@@ -1364,92 +1385,152 @@ stringLiteral
   / "'" s:([^']*) "'" { return s.join(""); }
 
 numberLiteral
-  = s:$([0-9]+("."[0-9]+)?) { return parseFloat( s ); }
-  / stringNumber
+  = s:$( "-"? [0-9]+("."[0-9]+)?) { return parseFloat( s ); }
+  / s:stringNumber WordBreak { return s; }
 
 // Numbers
 // TODO: Fractions, maybe 'point ...', uh... Also, condense this.
 // Maybe also allow commas after things like thousands.
 stringNumber
-  = stringNumberBaseThousandPlus
+  = i:stringNumberInteger
+    f:(
+        // PROBLEM: "One hundred and one quarter" breaks. Need more lookaheads somewhere.
+        ws f:stringNumberFraction s:'s'? &{ return ( i === 1 ) === !s } {
+          return i / f;
+        }
+      / And ii:( stringNumberInteger / a { return 1 } ) ws
+        f:stringNumberFraction s:'s'? &{ return ( ii === 1 ) === !s } {
+          return i + ii / f;
+        }
+      // / !( And stringNumberFraction )
+    )?
+    {
+      return f || i;
+    }
+  / a ws f:stringNumberFraction { return 1 / f; }
   / "zero" { return 0; }
 
-stringNumbersGroupUnit
-  = t:( stringNumbersTeen / stringNumbersBaseOne ) ( '-' / ws ) { return t; }
+stringNumberInteger
+  = stringNumberBaseThousandPlus
+
+stringNumberGroupUnit
+  = t:( stringNumberTeen / stringNumberBaseOne ) ( '-' / ws ) { return t; }
   / 'a' ws { return 1; }
 
-stringNumbersBaseOne
+stringNumberBaseOne
   = t:( 'one'i / 'two'i / 'three'i / 'four'i / 'five'i / 'six'i / 'seven'i
     / 'eight'i / 'nine'i
-  ) {
+  ) WordBreak {
     return ( 'one|two|three|four|five|six|seven|eight|nine'
       ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 1;
   }
 
-stringNumbersTeen
-  = t:( 'ten'i / 'eleven'i / 'twelve'i / 'thirteen'i / 'fourteen'i / 'fifteen'i
-    / 'sixteen'i / 'seventeen'i / 'eighteen'i / 'nineteen'i
+stringNumberTeen
+  = t:stringNumberTeenUnit WordBreak {
+    return t;
+  }
+
+stringNumberTeenUnit
+  = t:$( 'ten'i / 'eleven'i / 'twelve'i / ( 'thir'i
+        / 'four'i / 'fif'i / 'six'i / 'seven'i / 'eigh'i / 'nine'i ) 'teen'i
   ) {
     return ( 'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen' +
         '|eighteen|nineteen'
       ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 10;
   }
 
-stringNumbersBaseTen
-  = t:( 'twenty'i / 'thirty'i / 'forty'i / 'fifty'i / 'sixty'i / 'seventy'i
-    / 'eighty'i / 'ninety'i
-  ) o:( ( '-' / ' ' ) stringNumbersBaseOne )? {
-    return ( 'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety'
-      .split( '|' ).indexOf( t.toString().toLowerCase() ) + 2 ) * 10 +
+stringNumberBaseTen
+  = t:stringNumberBaseTenUnit 'ty'i o:( ( '-' / ' ' ) stringNumberBaseOne )? WordBreak {
+    return t +
       ( o ? o[ 1 ] : 0 );
   }
-  / stringNumbersTeen
-  / stringNumbersBaseOne
+  / stringNumberTeen
+  / stringNumberBaseOne
 
+stringNumberBaseTenUnit // 'twen' + -'ty' / -'tieth'
+  = t:( 'twen'i / 'thir'i / 'for'i / 'fif'i / 'six'i / 'seven'i / 'eigh'i
+    / 'nine'i
+  ) {
+    return ( 'twen|thir|for|fif|six|seven|eigh|nine'
+      .split( '|' ).indexOf( t.toString().toLowerCase() ) + 2 ) * 10
+  }
 
-stringNumbersBaseHundred
-  = u:stringNumbersGroupUnit 'hundred' t:( ( ws 'and' ws / '-' / ws ) stringNumbersBaseTen )? {
+stringNumberBaseHundred
+  = u:stringNumberGroupUnit 'hundred' t:( ( ws 'and' ws / '-' / ws ) stringNumberBaseTen )? WordBreak {
     return u * 100 + ( t ? t[ 1 ] : 0 );
   }
-  / stringNumbersBaseTen
+  / stringNumberBaseTen
 
 stringNumberBaseThousandPlus
-  = u:( h:stringNumbersBaseHundred ws { return h; } / stringNumbersGroupUnit )
-  base:(
-      'thousand' { return 1000; }
-    / s:( s:(
-        'm'i / 'b'i / 'tredec'i / 'tr'i / 'quadr'i / 'quint'i / 'sex'i /
-        'sept'i / 'oct'i / 'non'i / 'dec'i / 'undec'i / 'duodec'i
-      ) {
-          return Math.pow( 1000, (
-            'm|b|tr|quadr|quint|sex|sept|oct|non|dec|undec|duodec|tredec'
-          .split( '|' ).indexOf( s.toString().toLowerCase() ) + 2 ) );
-      } )
-      'illion' { return s; }
-  )
-  t:( ( ws 'and' ws / '-' / ws ) stringNumberBaseThousandPlus )? {
-    if ( t && t[ 1 ] ) {
-      if ( t > base ) {
-        // ERROR. TODO.
+  = u:( h:stringNumberBaseHundred ws { return h; } / stringNumberGroupUnit )
+    base:stringNumberBaseThousandPlusUnit WordBreak
+    t:( ( ws 'and' ws / '-' / ws ) stringNumberBaseThousandPlus )? {
+      if ( t && t[ 1 ] ) {
+        if ( t > base ) {
+          // ERROR. TODO.
+        }
       }
+      return u * base + ( t ? t[ 1 ] : 0 );
     }
-    return u * base + ( t ? t[ 1 ] : 0 );
-  }
-  / stringNumbersBaseHundred
+  / stringNumberBaseHundred
+
+stringNumberBaseThousandPlusUnit
+  = 'thousand' { return 1000; }
+  / s:( s:(
+      'm'i / 'b'i / 'tredec'i / 'tr'i / 'quadr'i / 'quint'i / 'sext'i /
+      'sept'i / 'oct'i / 'non'i / 'dec'i / 'undec'i / 'duodec'i
+    ) {
+        return Math.pow( 1000, (
+          'm|b|tr|quadr|quint|sext|sept|oct|non|dec|undec|duodec|tredec'
+        .split( '|' ).indexOf( s.toString().toLowerCase() ) + 2 ) );
+    } )
+    'illion' { return s; }
 
 // TODO. Use ordinal grouping. Maybe use together with the "next" things, and "slots".
 // WIP.
+// Ambiguous is "one hundred and two fifths", need lookaheads.
 stringNumberFraction
-  = 'half' { return 0.5; }
-  / 'quarter' { return 0.25; }
+  = 'half' { return 2; }
+  / 'quarter' { return 4; }
+  / stringNumberFractionUnit
+
+stringNumberFractionUnit
+  = stringNumberOrdinal
+
+ordinalNumber
+  = stringNumberOrdinal
+  / n:$[0-9]+ ( "st"i / "nd"i / "rd"i / "th"i ) { return n; }
+
+stringNumberOrdinal
+  = stringNumberOrdinalBaseHigher / stringNumberOrdinalBaseTen / stringNumberOrdinalTeen / stringNumberOrdinalBaseOne
 
 stringNumberOrdinalBaseOne
   = t:( 'first'i / 'second'i / 'third'i / 'fourth'i / 'fifth'i / 'sixth'i
-      / 'seventh'i / 'eight'i / 'nineth'i
+      / 'seventh'i / 'eighth'i / 'ninth'i
   ) {
-    return ( 'first|second|third|fourth|fifth|sixth|seventh|eighth|nineth'
+    return ( 'first|second|third|fourth|fifth|sixth|seventh|eighth|ninth'
       ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 1;
   }
+
+/*
+stringNumberOrdinalTeen
+  = t:( 'tenth'i / 'eleventh'i / 'twelfth'i / 'thirteenth'i / 'fourteenth'i
+      / 'fifteenth'i / 'sixteenth'i / 'seventeenth'i / 'eighteenth'
+      / 'nineteenth'i
+  ) {
+    return ( 'tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth'
+      + '|seventeenth|eighteenth|nineteenth' ).split( '|' ).indexOf( t.toString().toLowerCase() ) + 10;
+  }
+*/
+
+stringNumberOrdinalTeen
+  = t:( stringNumberTeenUnit / 'twelf' { return 12; } ) 'th'i { return t; }
+
+stringNumberOrdinalBaseTen
+  = t:stringNumberBaseTenUnit 'tieth'i { return t; }
+
+stringNumberOrdinalBaseHigher
+  = s:( 'hundred' { return 100; } / stringNumberBaseThousandPlusUnit ) 'th' { return s; }
 
 compositeLiteral
   = t:arrayLiteral  WordBreak { return { type: 'array', text: t, init: {
@@ -1511,6 +1592,11 @@ RawSimpleId
       return buildIdentifier( name );
     }
 
+QuotableIdentifier
+  = Identifier
+  / ( '"the'i ws / 'the'i ws '"' / '"' ) s:SimpleId '"' { return s; }
+  / ( "'the"i ws / "the"i ws "'" / "'" ) s:SimpleId "'" { return s; }
+
 Keyword
   = ( IfKW / WhileKW / ArgPreposition / "do"i / "otherwise"i / "and"i / "or"i / "make"i /
       "have"i / "set"i / "the"i / "get"i / "is"i / "doesn't" / "exist" /
@@ -1523,9 +1609,10 @@ Pronoun // PROBLEM: "her" is ambiguous from possessive. Breaks for example, To e
       { return useLast(); }
 
 PropGet // I really dislike this PossessivePronoun hack. TODO: Change.
-  = id:( &PossessivePronoun { return useLast(); } / Identifier ) props:(
-        ( "'s" / PossessivePronoun ) ws p:RawSimpleId { return [ p, false ]; }
-      / ( "'s" / PossessivePronoun ) ws num:NumSlot   { return [ num, true ]; }
+  = id:( &PossessivePronoun { return useLast(); } / Identifier )
+    props:(
+        ( "'s" / PossessivePronoun ) ws num:NumSlot   { return [ num, true ]; }
+      / ( "'s" / PossessivePronoun ) ws p:RawSimpleId { return [ p, false ]; }
     )+ {
       return props.reduce(
         ( object, prop ) => exprs.MemberExpression( object, ...prop ),
@@ -1534,7 +1621,7 @@ PropGet // I really dislike this PossessivePronoun hack. TODO: Change.
     }
 
 NumSlot
-  = n:$[0-9]+ ( "st" / "nd" / "rd" / "th" ) ws slot {
+  = n:ordinalNumber ws slot {
     return {
       "type": "Literal",
       value: parseInt( n ) - 1
@@ -1554,13 +1641,29 @@ AccessIdent // Unused
   // Actually, more like !{ check all variables and stuff }
   = [A-z_ ]+ & { x = arguments; } { return arguments; }
 
+// WIP. Should notice issues, and notice when hitting a full existing var name.
+// Should work with Setable/pronouns/etc.
+// Currently unused.
+MultiwordVarLoose
+  = ( "the" ws )? v:$( [A-Za-z_]+ ) l:( ws (!Keyword ) MultiwordVarLoose )? {
+    //return v;
+    var name = nonConstructorFormat( v ) + ( l ? constructorFormat( l[ 2 ] ).name : '' );
+    return getAlias( name ) || buildIdentifier( name );
+  }
+
+MultiwordVarStrict
+  = ( "the" ws )? v:[A-Za-z_]+ l:( ws (!Keyword ) MultiwordVarStrict )? {
+    var name = nonConstructorFormat( v ) + constructorFormat( l[ 2 ] );
+    return getAlias( name ) || buildIdentifier( name );
+  }
+
 // --- WHITESPACE, COMMENTS ---
 
 // - Comments
 InlineNote
   = "(Note"i ( ":" / ws "that" ) [^\)]+ ")"
 
-NoteBlock
+NoteBlock // Should this also allow "Note that"?
   = "Note"i "s"? ":" [^\n]* ( _ NoteBlockPoint )* _
   / ( _ NoteBlockPoint )+ _
 
