@@ -512,8 +512,7 @@ Unsure about prefixing. Maybe just this:
 > user = { clicks: ( t, f ) => { var c = new Promise( ( resolve ) => f() ); t.onclick = c.resolve(); } }; user.clicks( x )
 
 // ", which", "hereafter", "a new"
-// "X a y, which we'll call z."
-// Notes: Sequential vars exist in: "Make/Call X Y", "X Y Z", ...
+// Notes: Sequential vars exist in: "Make/Call X Y", "X Y Z" (args, but not params which are separated by "a"s), ...
 // DOING: groups, maybe cmdline/readme, greater ordinals
 // Maybe get rid of the "Eat [the number] five."
 // TODO: Don't have pronouns persist outside of scope. Ex. args after function end.
@@ -522,3 +521,5 @@ Unsure about prefixing. Maybe just this:
 // "Make one of the cities a new city, which we'll call X."
 - "We're dealing with these things: The X, the y, and the z."
 > var x, y, z;
+// Slots still can't be accessed by variable, only by explicit number.
+// TODO: Allow "3 quarters", by directly allowing integers in stringcardinals.

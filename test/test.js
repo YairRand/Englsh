@@ -217,15 +217,12 @@ describe( 'Functions', function() {
       'x(y, z);': [
         'X y and z.',
         'X with y and z.',
-        'X to y with z.'
+        'X to y with z.',
+        'X with the foo y and the bar z.'
       ],
-      // TODO.
-      /*
-      'x(y + z)': [
+      'x(y + z);': [
           'X y plus z.'
-        ]
       ]
-      */
     },
     'should process basic function statements': {
       'function x() {var y = z;}': [
@@ -234,6 +231,28 @@ describe( 'Functions', function() {
         'To x: Make y z.'
       ]
     },
+
+    'should allow defining get-syntax functions': {
+      'function x(y) {z();return y + 1;}': [
+        'To get the x of a y, z, and the x is the y plus 1.',
+        'To get x of a y: z, then make the x the y plus 1.'
+      ]
+    },
+    'should allow defining of-syntax functions': {
+      'function x(y) {return y + 1;}': [
+        'The x of a y is the y plus one.'
+      ]
+    },
+    'should allow defining a-syntax functions': {
+      'function x(y) {var z = y - 1;}': [
+        'To x a y, make z the y minus one.'
+      ],
+      'function x(z) {return z + 1;}': [
+        // TODO.
+        //'To x a y with a z, make the z y plus one.'
+      ]
+    },
+
     'should allow retrieving return values - "a" syntax': {
       'var x = y();': [
         'Y an x.',
@@ -244,10 +263,17 @@ describe( 'Functions', function() {
       ]
     },
     'should allow retrieving return values - "callit" syntax': {
+      // TODO: "Call the result", also.
       'var x = y();': [
         'Y, and call it x.',
         'Y, call it the x.',
         'Y, and then refer to it as "x".'
+      ]
+    },
+    'should allow retrieving return values - "of" syntax': {
+      'var x = y(z);': [
+        'Make x the y of z.',
+        'X is the y of the z.'
       ]
     },
     /*
@@ -261,15 +287,24 @@ describe( 'Functions', function() {
     },
     */
     'should allow arguments': {
-      // TODO
-      /*
-      'function x() {\n    var y = z;\n}': [
-        'To x, make y equal z.',
-        'To x is to set y to z.',
-        'To x: Make y z.'
+      'function x(y) {z(y);}': [
+        'To x a y, z the y.',
+        'To x with a y: z y.'
+      ],
+      'function x(y, z) {w(y, z);}': [
+        'To x a y a z, w y z.',
+        'To x with a y and a z: w with the y and the z.',
+        'To x with a y to a z: w with the y to the z.'
       ]
-      */
     }
+    // TODO
+    /*
+    'function x() {\n    var y = z;\n}': [
+      'To x, make y equal z.',
+      'To x is to set y to z.',
+      'To x: Make y z.'
+    ]
+    */
   } );
 
 } );
@@ -279,9 +314,16 @@ describe( 'Conditions/loops', function () {
     'should support basic if syntax': {
       'if (x === y) {x++;}': [
         'If x equals y, increment x.',
-        'If x equals y then increment x.',
-        'If x equals y, then increment x.',
-        'If x equals y: increment x.'
+        'If x is equal to y then increment x.',
+        'If x is the same as y, then increment x.',
+        'If x is y: increment x.',
+        'If x does equal y, increment x.'
+      ],
+      'if (x) {x++;}': [
+        'If x exists, increment x.'
+      ],
+      'if (!x) {x++;}': [
+        'If x doesn\'t exist, increment x.'
       ]
     },
     'should support postfix': {
@@ -304,6 +346,40 @@ describe( 'Conditions/loops', function () {
         "If the x is more than or equal to 3, increment x.",
         "If the x is greater than or equal to 3, increment x."
       ],
+    },
+    'should support instanceof/typeof': {
+      'if (x instanceof Y) {z();}': [
+        'If x is a y, z.',
+        'Z if the x is a y.'
+      ],
+      'if (!(x instanceof Y)) {z();}': [
+        'If x isn\'t a y, z.',
+        'Z if the x isn\'t a y.',
+        'If x is not a y, z.',
+        'Z if the x is not a y.'
+      ],
+      'if (typeof x === \'number\') {x++;}': [
+        'If x is a number, increment x.',
+        'If x is an amount, increment x.',
+        'If x is a quantity, increment x.'
+      ],
+      'if (typeof x === \'string\') {y();}': [
+        'If x is a text, y.',
+        'If x is a word, y.',
+        'If x is a sentence, y.'
+      ],
+      'if (typeof x !== \'string\') {y();}': [
+        'If x isn\'t a text, y.',
+        'If x is not a text, y.'
+      ],
+      'if (x instanceof Array) {y();}': [
+        'If x is a group, y.'
+        // TODO: If the xs are a group, y.
+      ],
+      'if (!(x instanceof Array)) {y();}': [
+        'If x isn\'t a group, y.'
+        // TODO: If the xs are a group, y.
+      ]
     },
     'should support basic loop syntax': {
       'var x = 0;while (x < 3) {x++;}': [
@@ -337,20 +413,43 @@ describe( 'Conditions/loops', function () {
       'if (x + y !== z) {x();}': [
         'If x plus y doesn\'t equal z then x.',
         'If x plus y does not equal z then x.',
-        // TODO.
-        //'If x plus y is not equal to z then x.',
+        'If x plus y is not equal to z then x.',
         'If x + y isn\'t equal to z, x.',
-        'X if x + y isn\'t equal to z.'
+        'X if x + y isn\'t equal to z.',
+        'If x plus y is not z, x.',
+        'If x plus y is not the same as z, x.'
       ],
-      // This v doesn't work. Should it?
+      'if (x === y || x instanceof Z || typeof x === \'number\') {w();}': [
+        'If x is y or a z or a number then w.'
+      ],
+      'if (x && x > 2) {z();}': [
+        'If x exists and is more than 2, z.'
+      ],
+      'if (!x || x <= 2) {z();}': [
+        'If x doesn\'t exist or is less than or equal 2, z.'
+      ],
+      'if (x !== y) {z();}': [
+        'If x isn\'t y, z.',
+        'If x is not y, z.',
+        'If x is not the same as y, z.',
+        'If x is not equal to y, z.',
+        'If x does not equal y, z.',
+        'If x doesn\'t equal y, z.',
+        'If x isn\'t the same as y, z.',
+        'If x isn\'t equal to y, z.'
+      ],
+      // This v doesn't work. Should it? TODO.
       // 'If x or y are lower than z'?
-      // TODO.
-      /*
-      'if (x !== y && x !== z) { x(); }': [
+
+      // Some of these don't work. TODO:
+      'if (x !== y && x !== z) {x();}': [
+        'If x isn\'t y or z, x.',
         'If x doesn\'t equal y or z, x.'
+      ],
+      'if (x !== y || x !== z) {x();}': [
+        'If x isn\'t y and z, x.',
+        'If x doesn\'t equal y and z, x.'
       ]
-    ]
-      */
     },
     'should support until/unless': {
       'if (!(x === y)) {z();}': [
@@ -375,6 +474,31 @@ describe( 'Conditions/loops', function () {
         'X is y if one is more than two, and z otherwise.',
         'Make the x y if one is more than two, or otherwise the z.',
       ]
+    },
+    'should support pronoun contractions': {
+      'var x = y;if (x === y) {z();}': [
+        'X is y. If it\'s y, z.',
+        'X is y. If it\'s equal to y, z.',
+        'X is y. If it\'s the same as y, z.'
+      ],
+      'var x = y;if (x !== y) {z();}': [
+        'X is y. If it\'s not y, z.',
+        'X is y. If it\'s not equal to y, z.',
+        'X is y. If it\'s not the same as y, z.'
+      ],
+      'var x = y;if (x !== y && !(x instanceof W)) {z();}': [
+        'X is y. If it\'s not y or a w, z.',
+        'X is y. If it isn\'t y or a w, z.',
+        'X is y. If it\'sn\'t y or a w, z.',
+      ],
+      // TODO:
+      /*
+      // 'If b exists and its not a c, d.'
+      // "it\'s" doesn't work after &&/||s.
+      'var x = y;if (x === y && x === z) {w();}': [
+        'X is y. If it\'s y and it\'s z, w.'
+      ]
+      */
     }
     // TODO: otherwise
   } );
@@ -543,6 +667,21 @@ describe( 'Comments', function () {
         'X (Note: lorum ipsum, with a line\nbreak) the y.',
       ],
     },
+    'should support so-that notes': {
+      'var x = y;': [
+        'Make x y so that we have a demonstration.',
+        'X is y so that lorem ipsum.',
+      ],
+      'if (x === y) {z();}': [
+        'If x is y, z so that blah.',
+        'Z if x is y so that blah.'
+      ],
+      'function x() {y();}': [
+        'To x, y so that the y is all y\'d.'
+      ]
+      // TODO:
+      // Should also allow just "so"?
+    }
   } );
 } );
 

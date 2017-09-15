@@ -4,11 +4,8 @@
 //
 // Note for later: It technically is possible to modify earlier stuff, by
 // storing the JSON array/object and then modifying it in JS directly.
-// When updating the parser, remember to change the "module" stuff
-// to "parser".
 
 // I still have no plan for how to send functions as arguments.
-
 
 
 {
@@ -265,8 +262,10 @@
   var orBlock  = logicBlock( '||' ),
       andBlock = logicBlock( '&&' );
 
-  function andOrReduce( x ) {
-    return x.map( x => x.reduce( andBlock ) ).reduce( orBlock );
+  function andOrReduce( x, negation ) {
+    // When doing "is not x or y", swap "and" and "or", per weird English.
+    var order = negation ? [ orBlock, andBlock ] : [ andBlock, orBlock ];
+    return x.map( x => x.reduce( order[ 0 ] ) ).reduce( order[ 1 ] );
   }
 
   var contextStack = [],
@@ -494,7 +493,7 @@ SentenceLevelStatement
   / PhraseGroupGroup
 
 EndFullSentence
-  = _ "." _ NoteBlock* / _ !.
+  = SoThat? _ "." _ NoteBlock* / _ !.
 
 PhraseGroupGroup
   = s:PhraseGroup ss:( ( !{ return returned; } SemicolonAndThen ) PhraseGroup)* {
@@ -550,7 +549,13 @@ ConditionAndExpression // cond and cond
   }
 
 ConditionOrOp
-  = left:Value c:ConditionAndOp cc:( ( ws "or" ) ConditionAndOp )* {
+  = left:(
+        // Need a bizarre pile of lookaheads to make "it's" work...
+        "it's" !( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return useLast(); }
+      / v:Value &( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return v; }
+    )
+    c:ConditionAndOp cc:( ( ws "or" ) ConditionAndOp )*
+  {
     var u = buildList( c, cc, 1 );
     return u.map( fn => fn( left ) ).reduce( orBlock );
   }
@@ -563,23 +568,24 @@ ConditionAndOp
     }
   }
 
-ConditionPredicate // op right or right or op right or right
-    // COMPLICATED: Should allow "If X is Y or a Z or a number", combining types.
-  = ConditionIsKW ws rights:ConditionOrIsV {
-      return function ( left ) {
-        var conditions = rights.map( x => x.map( y => y( left ) ) );
-        return andOrReduce( conditions );
-      }
-    }
-  / op:ConditionMathOp rights:ConditionOrValue {
-      return function ( left ) {
-        var conditions = rights.map( x => x.map( right => op( left, right ) ) );
-        return andOrReduce( conditions );
-      }
-    }
-  / op:ConditionUnaryOp {
+ConditionPredicate // op right or right or op right or right. "is less than x or y or more than z"
+    // Priorities: "exists" (not ='exists') > "is a x" > "x is x" > ...?
+  = op:ConditionUnaryOp {
       return function ( left ) {
         return op( left );
+      }
+    }
+    // This needs to take priority over MathCompareOp so that we don't get "=== new X()"
+  / ConditionIsKW? negation:( "n't" / ws "not" WordBreak )? !MathCompareOp ws rights:ConditionOrIsV {
+      return function ( left ) {
+        var conditions = rights.map( x => x.map( y => y( left, negation ) ) );
+        return andOrReduce( conditions, negation );
+      }
+    }
+  / op:MathCompareOp rights:ConditionOrValue {
+      return function ( left ) {
+        var conditions = rights.map( x => x.map( right => BinaryExpression( left, op, right ) ) );
+        return andOrReduce( conditions, op === '!==' );
       }
     }
 
@@ -587,9 +593,10 @@ ConditionIsKW
   = ws "is"
 
 ConditionIsValue
+    // Typeof checks
   = a ws type:PrimitiveType {
-    return function ( left ) {
-      return BinaryExpression( UnaryExpression( "typeof", left ), "===", {
+    return function ( left, negation ) {
+      return BinaryExpression( UnaryExpression( "typeof", left ), negation ? "!==" : "===", {
         "type": "Literal",
         "value": type,
         "raw": '"' + type + '"'
@@ -597,14 +604,15 @@ ConditionIsValue
     }
   } // Instanceof
   / a ws type:( compositeLiteralType / SimpleId ) {
-    return function ( left ) {
-      return BinaryExpression( left, "instanceof", constructorFormat( type ) );
+    return function ( left, negation ) {
+      var expr = BinaryExpression( left, "instanceof", constructorFormat( type ) );
+      return negation ? UnaryExpression( "!", expr ) : expr;
     };
   }
-  // Remember to lookahead for ops, avoid the "x is more ...." > "x === more" problem.
-  / right:Value {
-    return function ( left ) {
-      return BinaryExpression( left, "===", right );
+    // Simple equality
+  / right:Value !ConditionOpLookahead {
+    return function ( left, negation ) {
+      return BinaryExpression( left, negation ? "!==" : "===", right );
     };
   }
 
@@ -629,12 +637,7 @@ ConditionAndValue // right and right
   }
 
 ConditionOpLookahead
-  = ConditionMathOp / ConditionUnaryOp / ConditionIsKW
-
-ConditionMathOp // op
-  = op:MathCompareOp {
-    return ( left, right ) => BinaryExpression( left, op, right );
-  }
+  = MathCompareOp / ConditionUnaryOp / ConditionIsKW
 
 ConditionUnaryOp
   = ws "exists" {
@@ -650,21 +653,21 @@ Expression
 
 // --- MATH ---
 
-// TODO: Add "not" support" "If x is not a y, ..."
-MathCompareOp
+MathCompareOp // I think I lost the literal "=" op somewhere along the line.
+    // Fake optional "is": required by earlier lookahead except for "it's".
   = ws ( "is" ws )? k:MathCompareKeyword ws "than"
       e:( ws "or equal" ( ws "to" )? )? ws
       { return k + ( e ? '=' : '' ); }
-  / _ o:$( [><]"="? ) _ { return o; }
-  / ( ws ( // TODO: Do something with this so "and"/"or" aren't messed up.
-          ( "doesn't" / "does not" ) ws "equal" /
-          ( "is not" / "isn't" ) ( ws "equal to" / ws "the same as" / "" )
-        ) ws )
-      { return "!=="; }
-  / ( ws ( "equals" / "is equal to" / "is the same as" / "is" ) ws / _"="_ )
-      { return "==="; }
+  / MathCompareOpNoIs
+    // Fake optional "is": required by earlier lookahead except for "it's".
+  / ( ws "is" )? negation:( ws "not" / "n't" )? ( ws "equal to" / ws "the same as" ) ws { return negation ? "!==" : "==="; }
 
-// TODO: For "Is X Y?", etc.
+MathCompareOpNoIs
+  = _ o:$( [><]"="? ) _ { return o; }
+  / ws "does" negation:( ws "not" / "n't" )? ws "equal" ws { return negation ? "!==" : "==="; }
+  / ws "equals" ws { return "==="; }
+
+// TODO: For "Is X Y?", etc. (Currently unused.)
 MathCompareOpInvertedCase
   = ws
 
@@ -1580,7 +1583,7 @@ Identifier
 SimpleId // Should these accept numbers in non-initial characters?
   // For some reason, this is matching characters like "\".
   = !( Keyword ( [^A-Za-z_] / !. ) )
-    v:$([A-Za-z_]+) {
+    v:$([A-Za-z_] [A-Za-z0-9_]*) {
       var name = nonConstructorFormat( v );
       return getAlias( name ) || buildIdentifier( name );
     }
@@ -1599,9 +1602,9 @@ QuotableIdentifier
 
 Keyword
   = ( IfKW / WhileKW / ArgPreposition / "do"i / "otherwise"i / "and"i / "or"i / "make"i /
-      "have"i / "set"i / "the"i / "get"i / "is"i / "doesn't" / "exist" /
+      "have"i / "set"i / "the"i / "get"i / "is"i / "does" / "doesn't" / "exist" /
       "exists" / MathCompareKeyword / "equals" / "equal" / "as" / "same" /
-      "for"i / "then"i
+      "for"i / "then"i / "so"i
     )
 
 Pronoun // PROBLEM: "her" is ambiguous from possessive. Breaks for example, To eat a person, have her bah. TODO.
@@ -1669,6 +1672,9 @@ NoteBlock // Should this also allow "Note that"?
 
 NoteBlockPoint
   = "*" [^\n]+
+
+SoThat // TODO: Consider allowing just "so"
+  = ws "so"i ws "that"i ws [^,;\.]+
 
 // - Whitespace
 WordBreak
