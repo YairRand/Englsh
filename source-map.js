@@ -556,7 +556,7 @@ define('lib/source-map/util', ['require', 'exports', 'module' ], function(requir
       : aRoot.replace(/\/*$/, '') + '/' + aPath;
   }
   exports.join = join;
-  
+
   function hasOwn(obj, key) {
     return Object.prototype.hasOwnProperty.call(obj, key);
   }
@@ -1124,3 +1124,4 @@ window.sourceMap = {
   SourceMapGenerator: require('lib/source-map/source-map-generator').SourceMapGenerator,
   SourceNode: require('lib/source-map/source-node').SourceNode
 };
+export default sourceMap;

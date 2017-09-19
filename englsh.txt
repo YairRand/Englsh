@@ -490,12 +490,12 @@ Unsure about prefixing. Maybe just this:
 * A "broken" line needs to return something, and then pass the line.
 * ... Actually, maybe not. The whole "expecting ..." is useful. Hm.
 * Is there a way to grab that anyway?
+* Missing "Finally" should return specific error anyway.
 
 // TODO: Things that still can't be done:
 > Object.freeze( x );
 > setTimeout( () => {}, 1000 );
 > x = Symbol();
-> x = [ 1, 2 ]; x = new Array( 1, 2 ); // compositeLiteral doesn't take args.
 >
 
 // TODO: Things that parse weirdly:
@@ -503,8 +503,6 @@ Unsure about prefixing. Maybe just this:
 > x.Object()
 - A cookie is a thing.
 > cookie.prototype = Object.create(Thing.prototype); // Should be Object.create(Object.prototype);
-- If x doesn't equal 5 or 8, x.
-> if ( x !== 5 || x !== 8 ) { x(); } // Should be &&
 
 // Uncategorized random ideas:
 // Maybe:
@@ -519,7 +517,11 @@ Unsure about prefixing. Maybe just this:
 // "To roll the dice, " > function rollTheDice() { ...
 // Maybe todo eventually: "Settling Englnd" toy.
 // "Make one of the cities a new city, which we'll call X."
-- "We're dealing with these things: The X, the y, and the z."
+- "We're [going to be]?/We\'ll be dealing with these things [/the following [things]?]?: The X, the y, and the z."
 > var x, y, z;
 // Slots still can't be accessed by variable, only by explicit number.
 // TODO: Allow "3 quarters", by directly allowing integers in stringcardinals.
+// Should probably replace the ws-and-ws with And.
+// check out istanbul
+// TODO: less than as subtraction
+// TODO: Have identifier add underscores to actual js keywords when attempting to use as ids.

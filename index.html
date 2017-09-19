@@ -21,7 +21,7 @@
     }
   </style>
   <div class="highlighter"></div>
-  <textarea id="q">When creating a sandwich, make its tastiness "delicious".
+  <textarea id="englshBox">When creating a sandwich, make its tastiness "delicious".
 
 Notes:
 * All indentations are optional.
@@ -62,87 +62,95 @@ Create a person with the firstname "Chumble" and the lastname "Spuzz", which we'
 When making a balloon, make its color "yellow", and have ChumblePerson inflate the balloon.
 For a person to inflate something, have him say "fooof fooof fooof".
 Make a balloon.</textarea>
-  <textarea id="y"></textarea>
+  <textarea id="jsBox"></textarea>
   <button>Run</button>
   <div id="logarea"></div>
   <!--<script src="parser.js"></script>-->
   <!--<script src="astring.js"></script>-->
-  <script src="source-map.js"></script>
-  <script src="escodegen.js"></script>
+  <!--<script src="source-map.js"></script>-->
   <script type="module">
-    //console.log(321)
-    import * as parser from "./parser.js";
-    window.parse = parser.parse;
-    console.log(parser);
-    // x=escodegen.generate( { type: 'Literal', value: 40, loc: { start: { line: 5, column: 5 } } }, { sourceMap:'q.js',sourceMapWithCode:true} );
-    var q = document.querySelector( "#q" ),
-        y = document.querySelector( "#y" ),
+    //import * as parser from "./parser.js";
+    import { compile } from "./bundle.js";
+    //import { compile, sourceMap } from "./bundle.js";
+
+    // sourceMap currently can't be imported as bundle.
+    // (See https://github.com/mozilla/source-map/issues/274 )
+    import sourceMap from "./source-map.js";
+
+    var englshBox = document.querySelector( "#englshBox" ),
+        jsBox = document.querySelector( "#jsBox" ),
         logArea = document.querySelector( '#logarea' ),
         button = document.querySelector( 'button' ),
         code;
-    ( function () {
+    console.log = ( function () {
       var log = console.log;
-      console.log = function ( x ) {
+      return function ( x ) {
         log.apply( console, arguments );
         logArea.appendChild( document.createTextNode( x ) );
         logArea.appendChild( document.createElement( 'br' ) );
-      }
+      };
     } )();
 
-    // map = h.map; or mm below.
-    // position = { line: 1, column: 0 }
-    // returns { source, line, column }; of Englsh source.
+    /**
+     * @param {SourceMap} map h.map; or mm below.
+     * @param {Object} position  = { line: 1, column: 0 }
+     * @return {Object} returns { source, line, column }; of Englsh source.
+     */
     function lookupPosition( map, position ) {
       var u = new sourceMap.SourceMapConsumer( map.toString() );
-      return u.originalPositionFor( position );
+      var result = u.originalPositionFor( position );
+      if ( !result || result.line === null ) {
+        console.error( 'lookupPosition: position not found', map, position, u, result );
+      }
+      return result;
     }
+
     function highlight( position ) {
 
       //var elem = document.querySelector( '.highlighter' );
-      var c = q.value, line = 1, index = 0, len, range, rect;
-      for ( ; line < position.line; line++ ) {
-        index = q.value.indexOf( '\n', index ) + 1;
+      if ( position && position.line !== null ) {
+        var c = englshBox.value, line = 1, index = 0, len, range, rect;
+        for ( ; line < position.line; line++ ) {
+          index = englshBox.value.indexOf( '\n', index ) + 1;
+        }
+        index += position.column - 1;
+        len = c.substr( index ).search( /[^A-z]|$/ );
+        englshBox.selectionStart = index;
+        englshBox.selectionEnd = index + len;
+        englshBox.focus();
+        // ranges don't work for textareas.
+        /*
+        range = window.getSelection().getRangeAt( 0 );
+        if ( range ) {
+          rect = range.getBoundingClientRect();
+          elem.style.top = rect.top + 'px';
+          elem.style.left = rect.right + 'px';
+          console.log( elem, rect );
+        }
+        */
+      } else {
+        console.error( 'highlight: no position given' );
       }
-      index += position.column - 1;
-      len = c.substr( index ).search( /[^A-z]|$/ );
-      q.selectionStart = index;
-      q.selectionEnd = index + len;
-      q.focus();
-      // ranges don't work for textareas.
-      /*
-      range = window.getSelection().getRangeAt( 0 );
-      if ( range ) {
-        rect = range.getBoundingClientRect();
-        elem.style.top = rect.top + 'px';
-        elem.style.left = rect.right + 'px';
-        console.log( elem, rect );
-      }
-      */
     }
 
-    q.onkeyup = function () {
+    englshBox.onkeyup = function () {
       try {
         logArea.innerText = '';
-        var v = parser.parse( this.value );
-
-        code = escodegen.generate( v, {
-          sourceMap:'q.js',
-          sourceMapWithCode: true,
-          format: { indent: { style: '    ' } }
-        } );
-        var map = code.map;
-        y.value = code.code;
+        code = compile( this.value, { indent: '\t', lineEnd: '\n' } );
+        jsBox.value = code.code;
         button.disabled = false;
       } catch( e ) {
-        y.value = "???";
+        jsBox.value = "???";
         button.disabled = true;
         console.log( e );
       }
-    }
-    q.onkeyup();
-    q.focus();
+    };
+
+    englshBox.onkeyup();
+    englshBox.focus();
     button.onclick = function () {
       try {
+        logArea.innerText = '';
         eval( code.code );
       } catch ( e ) {
         var m, b = e.message;
@@ -150,9 +158,15 @@ Make a balloon.</textarea>
           var errorLocation = e.stack.match( /(\d+):(\d+)\)\n/ );
           if ( errorLocation ) {
             var [ , line, column ] = errorLocation;
-            window.eel = lookupPosition( code.map, { line, column } );
-            highlight( eel );
-            console.log( eel, errorLocation, e );
+
+            var jsPosition = { line, column },
+              englshPosition = lookupPosition( code.map, jsPosition );
+
+            if ( !englshPosition || englshPosition.line === null ) {
+              console.error( "No position given" );
+            }
+
+            highlight( englshPosition );
           }
         };
         if ( e instanceof TypeError ) {

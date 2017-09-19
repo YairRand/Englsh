@@ -1,18 +1,20 @@
 var assert = require('assert');
-var fs = require( 'fs' );
 require('@std/esm');
-//eval( fs.readFileSync('./parser.js','utf8') );
-//var parser = this.parser;
+
+//var compiler = require( '../src/compiler.js' );
+
 var parser = require( '../parser.js' );
-var escodegen = require( 'escodegen' );
-//console.log( e, e.generate,e.escodegen,Object.keys(e).length );
+
+var astring = require( 'astring' );
+
+// Temporary. TODO: Fix the samples so that the styles just match, them dump uglify.
+var uglify = require("uglify-es");
+
 function translate( text ) {
-  return escodegen.generate( parser.parse( text ), {
-    //sourceMap:'q.js',
-    //sourceMapWithCode: true,
-    //format: { indent: { style: '    ' } }
-    format: { indent: { style: '' }, newline: '' }
-  } );
+
+  return astring.generate( parser.parse( text ),
+    { indent: '', lineEnd: '' }
+  );
 }
 //import parse from '../parser';
 /*
@@ -21,6 +23,9 @@ describe( 'General', function() {
 } );*/
 
 function runPhrasingGroup( phrasings ) {
+  function minify( text ) {
+    return uglify.minify( text, { mangle: false, parse: false, compress: false } ).code;
+  }
   Object.keys( phrasings ).forEach( descr => {
     it( descr, () => {
       var phrasingGroup = phrasings[ descr ];
@@ -28,7 +33,8 @@ function runPhrasingGroup( phrasings ) {
         phrasingGroup[ code ].forEach( phrasing => {
           try {
             var translated = translate( phrasing );
-            assert.equal( translated, code );
+            assert.equal( minify( translated ), minify( code ) );
+            //assert.equal( translated, code );
           } catch ( e ) {
             throw Error( e + '\n"' + phrasing + '"' );
           }
@@ -74,6 +80,7 @@ describe( 'Variables', function() {
     'should work with mathematical operations': {
       'var x = 1 + 2;': [
         'X is 1 plus 2.',
+        'X is 1 more than 2.',
         'Make x 1 + 2.'
       ],
       'var x = y - z;': [
@@ -296,6 +303,13 @@ describe( 'Functions', function() {
         'To x with a y and a z: w with the y and the z.',
         'To x with a y to a z: w with the y to the z.'
       ]
+    },
+    'should allow complex statements in definition': {
+      'function x() {if (y) {z();}}': [
+        'To x, if y exists, z.',
+        'To x, z if y exists.'
+      ]
+      // TODO: More stuff.
     }
     // TODO
     /*
@@ -381,6 +395,11 @@ describe( 'Conditions/loops', function () {
         // TODO: If the xs are a group, y.
       ]
     },
+    'should support includes': {
+      'if (xs.includes(y)) {z();}': [
+        'If y is one of the xs, z.'
+      ]
+    },
     'should support basic loop syntax': {
       'var x = 0;while (x < 3) {x++;}': [
         'X is 0. While x is less than 3, increment x.',
@@ -389,8 +408,7 @@ describe( 'Conditions/loops', function () {
       'var x = 0;while (!(x > 3)) {x++;}': [
         'X is 0. Until x is more than 3, increment x.',
         'X is 0. Increment x until it is more than 3.',
-        // TODO. Support it's.
-        //'X is 0. Increment x until it\'s more than 3.',
+        'X is 0. Increment x until it\'s more than 3.'
       ]
     },
     'should support logical operators': {
@@ -398,10 +416,14 @@ describe( 'Conditions/loops', function () {
         'If x is 0 and y is 1, increment x.'
       ],
       'if (x > 0 && x < 3) {x++;}': [
-        'If x is more than 0 and less than 3, increment x.'
+        'If x is more than 0 and less than 3, increment x.',
+        'If x is more than 0 and is less than 3, increment x.'
       ],
       'if (x === 0 || x === 1) {x++;}': [
         'If x equals 0 or 1, increment x.',
+        'If x equals 0 or equals 1, increment x.',
+        'If x equals 0 or is equal to 1, increment x.',
+        'If x equals 0 or x equals 1, increment x.',
         'Increment x if x equals 0 or 1.',
       ],
       'if (x > 5 && x < 8 || x > 12) {x++;}': [
@@ -441,7 +463,6 @@ describe( 'Conditions/loops', function () {
       // This v doesn't work. Should it? TODO.
       // 'If x or y are lower than z'?
 
-      // Some of these don't work. TODO:
       'if (x !== y && x !== z) {x();}': [
         'If x isn\'t y or z, x.',
         'If x doesn\'t equal y or z, x.'
@@ -491,16 +512,28 @@ describe( 'Conditions/loops', function () {
         'X is y. If it isn\'t y or a w, z.',
         'X is y. If it\'sn\'t y or a w, z.',
       ],
-      // TODO:
-      /*
-      // 'If b exists and its not a c, d.'
-      // "it\'s" doesn't work after &&/||s.
       'var x = y;if (x === y && x === z) {w();}': [
-        'X is y. If it\'s y and it\'s z, w.'
+        'X is y. If it\'s y and it\'s z, w.',
+        'X is y. If it equals y and it\'s z, w.',
+        'X is y. If it\'s equal to y and it\'s z, w.',
+      ],
+      'var x = y;if (x < y || x < z) {w();}': [
+        'X is y. If it\'s less than y or z, w.',
+        'X is y. If it is less than y or it\'s less than z, w.',
+        'X is y. If it\'s less than y or it\'s less than z, w.',
+        'X is y. If it\'s less than y or less than z, w.',
+      ],
+      'var x = y;if (x && !(x instanceof Z)) {w();}': [
+        'X is y. If x exists and it\'s not a z, w.'
       ]
-      */
-    }
+
+    },
     // TODO: otherwise
+    'should support else': {
+      'if (x === y) {z();} else {w();}': [
+        'If x is y, z. Otherwise, w.'
+      ]
+    }
   } );
 } );
 
@@ -553,10 +586,10 @@ describe( 'Constructors', function () {
         'An x is the same thing as a y.'
       ]
     },
-    'with arguments': {
+    'defining with arguments': {
       'function X(y, z) {this.y = y;}': [
         'When making an x with a y and a z, make its y the y.',
-        // TODO
+        // TODO. Doesn't accept multiple prepositions.
         //'When an x is made with a y to a z, make the x\'s y the y.'
       ]
     }

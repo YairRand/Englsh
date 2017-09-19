@@ -1,21 +1,32 @@
 {
   "name": "Englsh",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "bin": "englsh.js",
   "scripts": {
     "test": "mocha",
-    "build": "pegjs -o parser.js --format es englsh.pegjs"
+    "build": "pegjs -o parser.js --format es englsh.pegjs",
+    "pack": "rollup -c"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/YairRand/Englsh.git"
   },
+  "license": "MIT",
   "devDependencies": {
-    "@std/esm": "^0.5.0",
-    "escodegen": "^1.8.1",
     "mocha": "^3.5.0",
-    "pegjs": "git+https://github.com/pegjs/pegjs.git"
+    "pegjs": "git+https://github.com/pegjs/pegjs.git",
+    "rollup": "^0.50.0",
+    "rollup-plugin-commonjs": "^8.2.1",
+    "rollup-plugin-node-resolve": "^3.0.0",
+    "uglify-es": "^3.1.1"
   },
   "@std/esm": {
     "esm": "js"
+  },
+  "dependencies": {
+    "@std/esm": "^0.5.0",
+    "astring": "^1.0.5",
+    "minimist": "^1.2.0",
+    "source-map": "0.5.0"
   }
 }

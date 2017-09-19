@@ -84,18 +84,24 @@
     }
   }
 
-  function getRParam( params, body ) {
+  // Go through the params, look for a param with a matching "return"-style
+  // statement in the function body, and return that.
+  function getReturnParam( params, body ) {
     var hits = {},
-      RP;
+      returnParam;
+
+    // TODO: This should only apply to "direct object" params.
     params && params.forEach( param => hits[ param.name ] = 0 );
     function loop( j ) {
-      if ( typeof j === 'object' ) {
+      if ( j && typeof j === 'object' ) {
         if ( j.type === "Identifier" ) {
           ( j.name in hits ) && hits[ j.name ]++;
         } else if ( j.type === "VariableDeclarator" ) {
           loop( j.init );
-          if ( !RP && params.some( param => param.name === j.id.name ) && hits[ j.id.name ] === 0 ) {
-            RP = j.id.name;
+          // If we're setting the value of a param, without yet having used it
+          // in any other way, assume it's meant as a return statement.
+          if ( !returnParam && params.some( param => param.name === j.id.name ) && hits[ j.id.name ] === 0 ) {
+            returnParam = j.id.name;
           }
         } else {
           // ISSUE: For-in ordering is implementation-dependent, and (in theory)
@@ -110,12 +116,14 @@
       }
     }
     loop( body );
-    return RP;
+    return returnParam;
   }
 
   function buildFunctionStatement( id, params, body, expression ) {
     // TODO: addVar( name.name ) one context level up.
-    var RParam = getRParam( params, body );
+
+    // TODO: This shouldn't run for constructors, or indirect-object arguments.
+    var RParam = getReturnParam( params, body );
     if ( RParam ) {
       params = params.filter( x => x.name !== RParam );
       body = body.concat( {
@@ -240,7 +248,7 @@
       },
       block = {
         "type": "BlockStatement",
-        "body": body
+        "body": body instanceof Array ? body : [ body ]
       };
     return Object.assign( outer, isIf ?
       { consequent: block, alternate: alt || null } :
@@ -324,7 +332,7 @@
     lastUsed = val || tempLastUsed;
   }
   function useLast() {
-    return lastUsed;
+    return lastUsed || buildIdentifier( "undefined" );
   }
   function getExpectedReturn() {
     // .find not supported in IE.
@@ -458,7 +466,7 @@ SourceElement
   = FullSentence // / Note
 
 Block
-  = DoTheFollowing _ NoteBlock*
+  = DoTheFollowing p:PostIfWhile ":" _ NoteBlock*
   ( "first"i ","? ws )? s:SentenceLevelStatement
   ss:( !{ return returned; } EndFullSentence SentencePrefix SentenceLevelStatement )*
   sss:(
@@ -466,7 +474,7 @@ Block
     EndFullSentence "Finally"i ","? ws sss:PhraseGroupGroup { return sss; }
   )
   {
-    return flatten( buildList( s, ss, 3 ).concat( sss ) );
+    return p( flatten( buildList( s, ss, 3 ).concat( sss ) ) );
   }
 
 // Capital to period.
@@ -486,7 +494,7 @@ DoTheFollowing
     "take"i _ ( "the following" / "these" ) _ ( "steps"i / "actions"i ) /
     "follow these instructions"i / "do what follows"i / "do as follows"i
     //"do this"i
-  ) ":"
+  )
 
 SentenceLevelStatement
   = DefineFunction
@@ -544,15 +552,15 @@ ConditionOrExpression // cond or cond
   }
 
 ConditionAndExpression // cond and cond
-  = c:ConditionOrOp cc:( ( ws "and" ws ) ConditionOrOp )* {
+  = c:ConditionOrOp cc:( And ConditionOrOp )* {
     return buildList( c, cc, 1 ).reduce( andBlock );
   }
 
 ConditionOrOp
   = left:(
         // Need a bizarre pile of lookaheads to make "it's" work...
-        "it's" !( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return useLast(); }
-      / v:Value &( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return v; }
+        PronounIsContraction !( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return useLast(); }
+      / v:Value              &( ws "is" / MathCompareOpNoIs / ConditionUnaryOp ) { return v; }
     )
     c:ConditionAndOp cc:( ( ws "or" ) ConditionAndOp )*
   {
@@ -609,8 +617,24 @@ ConditionIsValue
       return negation ? UnaryExpression( "!", expr ) : expr;
     };
   }
+    // In an array
+  / "one of" ws right:Value {
+    return function ( left, negation ) {
+      var expr = {
+        "type": "CallExpression",
+        "callee": {
+          "type": "MemberExpression",
+          "object": right,
+          "property": buildIdentifier( "includes" ),
+          "computed": false
+        },
+        "arguments": [ left ]
+      };
+      return negation ? UnaryExpression( "!", expr ) : expr;
+    };
+  }
     // Simple equality
-  / right:Value !ConditionOpLookahead {
+  / right:Value !"'" !ConditionOpLookahead {
     return function ( left, negation ) {
       return BinaryExpression( left, negation ? "!==" : "===", right );
     };
@@ -632,7 +656,7 @@ ConditionOrValue // right or right
   }
 
 ConditionAndValue // right and right
-  = right:Value rights:( ( ws "and" ws ) Value !ConditionOpLookahead )* {
+  = right:Value !"'" rights:( And Value !"'" !ConditionOpLookahead )* {
     return buildList( right, rights, 1 );
   }
 
@@ -720,8 +744,8 @@ AdditiveExpression
     tail:(ws AdditiveOperator ws MultiplicativeExpression)*
     { return buildBinaryExpression(head, tail); }
 
-AdditiveOperator
-  = ("plus"/"+")  { return "+"; }
+AdditiveOperator // "Added to"?
+  = ("plus"/"more than"/"+")  { return "+"; }
   / ("minus"/"-") { return "-"; }
   // Concatenation. Should probably be handled differently, to
   // force toString: x followed by y > '' + x + y;
@@ -756,7 +780,7 @@ WhileStatement
     return ifWhileBlock( term, test, cblock );
   }
 
-Otherwise // TODO, maybe: "If not", for otherwise.
+Otherwise // TODO, maybe: "If not", for otherwise. "Or else"?
   = (
     ( ( "." / ";" / "," )? ws ( "and" / "or" ) ws / ( "." / ";" / "," ) ws )
     "otherwise"i
@@ -844,11 +868,12 @@ QuestionIntIfOtherwise
     }
 
 // TODO: Consider allowing this for Do the following blocks:
-// ("Do the following while x is y:")
+// ("When creating a x, x if x is x.")
 // TODO: Allow "otherwise" for post-ifs.
+
 PostIfWhile
   = ws term:IfWhileKW ws test:Condition {
-      return ( o ) => ifWhileBlock( term, test, [ o ] );
+      return ( o ) => ifWhileBlock( term, test, o );
     }
   / '' { return x => x }
 
@@ -875,6 +900,7 @@ LetStatement
   }
 
 // Lotsa duplication here, but I can't figure out any other way to do this.
+// TODO: Array.pushUnique(), "Make x one of the ys."
 VarStatement
   = l:(
       ( "let"i ws )
@@ -1193,7 +1219,7 @@ ParamName
   }
 
 CallIt
-  = ( "call it" / "refer to it as" ) ws id:QuotableIdentifier {
+  = ( ( "call" / "name" ) ws "it" / "refer to it as" ) ws id:QuotableIdentifier {
     return id;
   }
 
@@ -1378,7 +1404,7 @@ Literal
       value: v,
       // astring requires this. It's not part of the estree spec.
       // TODO: Fix this for English number literals.
-      raw: text()
+      //raw: text()
     }; }
 
 // Literals and Primitive types
@@ -1574,7 +1600,7 @@ StringType = ( "string" / "sentence" / "phrase" / "word" / "text" )
 // --- IDENTIFIERS, PROPERTIES ---
 
 Identifier
-  = v:Pronoun / ("the"i ws)? v:SimpleId {
+  = v:Pronoun / The? v:SimpleId {
     //return { "type": "Identifier", "name": text().replace( ' ', '_' ) };
     maybeRemember( v );
     return v;
@@ -1597,8 +1623,11 @@ RawSimpleId
 
 QuotableIdentifier
   = Identifier
-  / ( '"the'i ws / 'the'i ws '"' / '"' ) s:SimpleId '"' { return s; }
-  / ( "'the"i ws / "the"i ws "'" / "'" ) s:SimpleId "'" { return s; }
+  / ( '"' The / The '"' / '"' ) s:SimpleId '"' { return s; }
+  / ( "'" The / The "'" / "'" ) s:SimpleId "'" { return s; }
+
+The // TODO: Consider whether "this"/"that" should be "the"s, pronouns, or somehow both.
+  = ( "the"i / "this"i ) ws
 
 Keyword
   = ( IfKW / WhileKW / ArgPreposition / "do"i / "otherwise"i / "and"i / "or"i / "make"i /
@@ -1608,11 +1637,15 @@ Keyword
     )
 
 Pronoun // PROBLEM: "her" is ambiguous from possessive. Breaks for example, To eat a person, have her bah. TODO.
-  = ( "it"i / "him"i / "her"i / "he"i / "she"i / "that"i ) WordBreak
+  = ( "it"i / "him"i / "her"i / "he"i / "she"i / "that"i ) WordBreak !"'"
       { return useLast(); }
 
+PronounIsContraction
+  = "it's" / "he's" / "she's"
+
 PropGet // I really dislike this PossessivePronoun hack. TODO: Change.
-  = id:( &PossessivePronoun { return useLast(); } / Identifier )
+  = !PronounIsContraction
+    id:( &PossessivePronoun { return useLast(); } / Identifier )
     props:(
         ( "'s" / PossessivePronoun ) ws num:NumSlot   { return [ num, true ]; }
       / ( "'s" / PossessivePronoun ) ws p:RawSimpleId { return [ p, false ]; }
@@ -1648,14 +1681,14 @@ AccessIdent // Unused
 // Should work with Setable/pronouns/etc.
 // Currently unused.
 MultiwordVarLoose
-  = ( "the" ws )? v:$( [A-Za-z_]+ ) l:( ws (!Keyword ) MultiwordVarLoose )? {
+  = The? v:$( [A-Za-z_]+ ) l:( ws (!Keyword ) MultiwordVarLoose )? {
     //return v;
     var name = nonConstructorFormat( v ) + ( l ? constructorFormat( l[ 2 ] ).name : '' );
     return getAlias( name ) || buildIdentifier( name );
   }
 
 MultiwordVarStrict
-  = ( "the" ws )? v:[A-Za-z_]+ l:( ws (!Keyword ) MultiwordVarStrict )? {
+  = The? v:[A-Za-z_]+ l:( ws (!Keyword ) MultiwordVarStrict )? {
     var name = nonConstructorFormat( v ) + constructorFormat( l[ 2 ] );
     return getAlias( name ) || buildIdentifier( name );
   }
@@ -1673,7 +1706,8 @@ NoteBlock // Should this also allow "Note that"?
 NoteBlockPoint
   = "*" [^\n]+
 
-SoThat // TODO: Consider allowing just "so"
+SoThat // TODO: Consider allowing just "so". Problem with that: "so long as".
+  //= ws "so"i ws "that"i ws [^,;\.]+
   = ws "so"i ws "that"i ws [^,;\.]+
 
 // - Whitespace
