@@ -468,6 +468,11 @@ function factorial(n) {
     // return n === 0 ? 1 : n * factorial( n - 1 );
 }
 
+// ALIASES
+- X is the cosine of y. (Done)
+> x = Math.cos( y );
+  TODO
+Aliases for dom manipulation, canvas editing, text stuff, random numbers, pi, date...
 
 
 TO CONSIDER: Add fancy array functions, like reduce and map.
@@ -525,3 +530,14 @@ Unsure about prefixing. Maybe just this:
 // check out istanbul
 // TODO: less than as subtraction
 // TODO: Have identifier add underscores to actual js keywords when attempting to use as ids.
+
+// TODO: For args, deal with two of the same type. "To x a y and another y, z the first y."
+
+// Maybe have "and" act as a grouper for "Have X Y and Z" > "x.y(); x.z();"
+
+// TODO (probably): Track certain/possible types for both variables and properties,
+// so that we can use "add" to mean both pushUnique and + depending on property.
+// Or where ambiguous, "x instanceof Array ? x.pushUnique( y ) : ( x += y );"
+// Same for "follows", which implies toString for numbers.
+
+// "The result of y is z. Make b the result of y."

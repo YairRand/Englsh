@@ -222,8 +222,10 @@ describe( 'Functions', function() {
         'X in y.',
       ],
       'x(y, z);': [
+        'X y z.',
         'X y and z.',
         'X with y and z.',
+        'X with y and with z.',
         'X to y with z.',
         'X with the foo y and the bar z.'
       ],
@@ -254,9 +256,8 @@ describe( 'Functions', function() {
       'function x(y) {var z = y - 1;}': [
         'To x a y, make z the y minus one.'
       ],
-      'function x(z) {return z + 1;}': [
-        // TODO.
-        //'To x a y with a z, make the z y plus one.'
+      'function x(z) {var y = z + 1;return y;}': [
+        'To x a y with a z, make the y z plus one.'
       ]
     },
 
@@ -304,13 +305,30 @@ describe( 'Functions', function() {
         'To x with a y to a z: w with the y to the z.'
       ]
     },
+    'should allow defining object methods': {
+      'x.y = function y() {z();}': [
+        'For x to y, z.',
+        'To have the x y, z.',
+      ],
+      'x.y = function y() {this.z();}': [
+        'For x to y, have it z.',
+        'For x to y, have the x z.'
+      ]
+    },
+    'should allow calling methods': {
+      'x.y();': [
+        'Have the x y.',
+        'The x should y.',
+        'The x must y.'
+      ]
+    },
     'should allow complex statements in definition': {
       'function x() {if (y) {z();}}': [
         'To x, if y exists, z.',
         'To x, z if y exists.'
       ]
       // TODO: More stuff.
-    }
+    },
     // TODO
     /*
     'function x() {\n    var y = z;\n}': [
@@ -319,6 +337,18 @@ describe( 'Functions', function() {
       'To x: Make y z.'
     ]
     */
+    'should allow multi-word function names': {
+      'function bakeCake() {x();}bakeCake();': [
+        'To bake cake, x. Bake cake.'
+      ],
+      'function rollTheDice() {console.log(4);}rollTheDice();': [
+        'To roll the dice, have the console log 4. Roll the dice.'
+      ],
+      'function foreverIncrement(number) {foreverIncrement(number + 1);}': [
+        'To forever increment a number, forever increment the number plus one.'
+      ],
+    }
+
   } );
 
 } );
@@ -592,6 +622,16 @@ describe( 'Constructors', function () {
         // TODO. Doesn't accept multiple prepositions.
         //'When an x is made with a y to a z, make the x\'s y the y.'
       ]
+    },
+    'should support attaching methods': {
+      'function X() {y();}X.prototype.y = function y() {z();};': [
+        'To create an x, y. For an x to y, z.',
+        'To create an x, y. To have an x y, z.'
+      ],
+      'function X() {y();}X.prototype.y = function y() {this.z();};': [
+        'To create an x, y. For an x to y, have it z.',
+        'To create an x, y. To have an x y, have the x z.'
+      ]
     }
   } );
 } );
@@ -624,11 +664,10 @@ describe( 'Blocks', function () {
   runPhrasingGroup( {
     'should support L1 construction': {
       'x();y();': [
-        // This doesn't work. It should. See ArgGroupNonPrep, which shouldn't allow & as first.
-        // I feel like I fixed this in the other version.
-        //'X and y.',
+        'X and y.',
         'X, y.',
         'X, and y.',
+        'X and then y.',
         'X, and then y.'
       ]
     },
@@ -715,6 +754,32 @@ describe( 'Comments', function () {
       // TODO:
       // Should also allow just "so"?
     }
+  } );
+} );
+
+
+describe( 'Miscellaneous', function () {
+  runPhrasingGroup( {
+    'should support Math aliases': {
+      'var x = Math.cos( y );': [
+        'X is the cosine of y.'
+      ],
+      'var x = Math.sin( y );': [
+        'X is the sine of y.'
+      ],
+      'var x = Math.tan( y );': [
+        'X is the tangent of y.'
+      ],
+      'var x = Math.acos( y );': [
+        'X is the arccosine of y.'
+      ],
+      'var x = Math.asin( y );': [
+        'X is the arcsine of y.'
+      ],
+      'var x = Math.atan( y );': [
+        'X is the arctangent of y.'
+      ],
+    },
   } );
 } );
 

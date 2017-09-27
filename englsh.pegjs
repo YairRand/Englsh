@@ -49,6 +49,7 @@
     if ( eReturn && ( name.name === eReturn || val.name === eReturn ) ) {
       var returnValue = name.name === eReturn ? val : name;
       returned = true;
+      // TODO: Remember what type the ReturnStatement of the function was.
       return  {
         "type": "ReturnStatement",
         "argument": returnValue,
@@ -59,7 +60,7 @@
       var preDeclared = m || hasVar( name.name );
       solidifyRemember( name );
       if ( !preDeclared ) {
-        addVar( name.name );
+        addVar( name.name, { type: val.type === "Literal" ? typeof val.value : 'unknown' } );
         return {
           "type": "VariableDeclaration",
           "declarations": [
@@ -118,8 +119,8 @@
     loop( body );
     return returnParam;
   }
-
-  function buildFunctionStatement( id, params, body, expression ) {
+  
+  function buildFunctionStatement( id, params, body, isExpression ) {
     // TODO: addVar( name.name ) one context level up.
 
     // TODO: This shouldn't run for constructors, or indirect-object arguments.
@@ -138,11 +139,13 @@
 
     // Add function's id to context, unless there's already a
     // "undefined-constructor" fn already waiting.
-    // (Should probably do an actual check here...)
-    findVar( id.name ) || addVar( id.name );
+    // (Should probably do an actual check here... TODO.)
+    // TODO: Fix the issue that the var only gets created after the function is
+    // complete. Probably fiddle with startFunction, add new "id" param or through options.
+    //findVar( id.name ) || addVar( id.name );
 
     return {
-      "type": expression ? "FunctionExpression" : "FunctionDeclaration",
+      "type": isExpression ? "FunctionExpression" : "FunctionDeclaration",
       "id": id,
       "params": params,
       "body": {
@@ -159,7 +162,7 @@
       "type": "ExpressionStatement",
       "expression": exp,
       loc: loc()
-    }
+    };
   }
 
   function buildIdentifier( name ) {
@@ -189,7 +192,7 @@
       }
       _args.forEach( ( p, i ) => r[ p ] = args2[ i ] );
       return r;
-    }
+    };
   }
 
   // TODO.
@@ -265,7 +268,7 @@
         "right": right,
         loc: loc()
       };
-    }
+    };
   }
   var orBlock  = logicBlock( '||' ),
       andBlock = logicBlock( '&&' );
@@ -298,7 +301,7 @@
     return contextStack.pop();
   }
   function addVar( name, options ) {
-    getContext().vars[ name ] = options || { type: 'var' };
+    getContext().vars[ name ] = Object.assign( { type: 'var' }, options || {} );
   }
   function hasVar( name ) {
     return contextStack.some( s => {
@@ -347,20 +350,27 @@
   }
 
   function startFunction( options ) {
-    var TE = { "type": "ThisExpression" };
-    // (This line needs to be first, because setAlias operates on the current context.)
+    var ThisExpression = { "type": "ThisExpression" };
+
+    // If an ID is supplied, mark it as a variable with type 'function' in the outer context.
+    if ( options && options.id ) {
+      addVar( options.id.name, { type: 'function' } );
+    }
+
+    // (This line needs to be before aliases, because setAlias operates on the current context.)
     pushContext( options );
+
     if ( options ) {
       if ( options.thisAlias ) {
         // PROBLEM: Nested functions mess up when attempting to call higher-
         // level "this". TODO: Fix.
         setAlias(
           nonConstructorFormat( options.thisAlias.name ),
-          TE
+          ThisExpression
         );
       }
     }
-    solidifyRemember( options && options.rememberThis && TE );
+    solidifyRemember( options && options.rememberThis && ThisExpression );
   }
 
   pushContext();
@@ -440,6 +450,32 @@
 
   }
 
+  // ...
+  function ofAlias( id ) {
+    var aliases = {
+      'cosine': 'Math.cos',
+      'sine': 'Math.sin',
+      'tangent': 'Math.tan',
+      // 'square root': 'Math.sqrt',
+      // 'cube root': 'Math.cbrt',
+      'arccosine': 'Math.acos',
+      'arcsine': 'Math.asin',
+      'arctangent': 'Math.atan'
+
+    };
+    if ( aliases[ id.name ] ) {
+      var x = aliases[ id.name ].split( '.' );
+      return x.slice( 1 ).reduce( ( x, y ) => ( {
+        "type": "MemberExpression",
+        "object": x,
+        "property": buildIdentifier( y ),
+        "computed": false
+      } ), buildIdentifier( x[ 0 ] ) );
+    } else {
+      return id;
+    }
+  }
+
 }
 
 // --- START PARSER ---
@@ -471,7 +507,22 @@ Block
   ss:( !{ return returned; } EndFullSentence SentencePrefix SentenceLevelStatement )*
   sss:(
     & { return returned; } { return []; } /
-    EndFullSentence "Finally"i ","? ws sss:PhraseGroupGroup { return sss; }
+    EndFullSentence Finally ","? ws sss:PhraseGroupGroup { return sss; } /
+    EndFullSentence {
+      return {
+         "type": "ThrowStatement",
+         "argument": {
+            "type": "NewExpression",
+            "callee": buildIdentifier( "Error" ),
+            "arguments": [
+               {
+                  "type": "Literal",
+                  "value": "Unclosed list of steps. The final step in the list should begin with \"Finally\" or similar."
+               }
+            ]
+         }
+      };
+    }
   )
   {
     return p( flatten( buildList( s, ss, 3 ).concat( sss ) ) );
@@ -486,7 +537,7 @@ FullSentence
 
 SentencePrefix // TODO: Only allow each prefix where appropriate.
   = ( ( "First"i / "Then"i / "Next"i ) ","? ws )?
-    ( !"Finally"i )
+    ( !Finally )
 
 DoTheFollowing
   = (
@@ -495,6 +546,9 @@ DoTheFollowing
     "follow these instructions"i / "do what follows"i / "do as follows"i
     //"do this"i
   )
+
+Finally
+  = "Finally"i / "Last"i / "Lastly"i / "To conclude"i
 
 SentenceLevelStatement
   = DefineFunction
@@ -573,7 +627,7 @@ ConditionAndOp
     var u = buildList( c, cc, 1 );
     return function ( left ) {
       return u.map( fn => fn( left ) ).reduce( andBlock );
-    }
+    };
   }
 
 ConditionPredicate // op right or right or op right or right. "is less than x or y or more than z"
@@ -581,20 +635,20 @@ ConditionPredicate // op right or right or op right or right. "is less than x or
   = op:ConditionUnaryOp {
       return function ( left ) {
         return op( left );
-      }
+      };
     }
     // This needs to take priority over MathCompareOp so that we don't get "=== new X()"
   / ConditionIsKW? negation:( "n't" / ws "not" WordBreak )? !MathCompareOp ws rights:ConditionOrIsV {
       return function ( left ) {
         var conditions = rights.map( x => x.map( y => y( left, negation ) ) );
         return andOrReduce( conditions, negation );
-      }
+      };
     }
   / op:MathCompareOp rights:ConditionOrValue {
       return function ( left ) {
         var conditions = rights.map( x => x.map( right => BinaryExpression( left, op, right ) ) );
         return andOrReduce( conditions, op === '!==' );
-      }
+      };
     }
 
 ConditionIsKW
@@ -609,7 +663,7 @@ ConditionIsValue
         "value": type,
         "raw": '"' + type + '"'
       } );
-    }
+    };
   } // Instanceof
   / a ws type:( compositeLiteralType / SimpleId ) {
     return function ( left, negation ) {
@@ -864,7 +918,7 @@ QuestionIntIfOtherwise
         "type": "SwitchCase",
         "test": null,
         "consequent": cblock
-      }
+      };
     }
 
 // TODO: Consider allowing this for Do the following blocks:
@@ -940,7 +994,7 @@ VarStatement
     // ARRAY CONSTRUCTION
   / s:(
         ( ( "these"i / "the following"i ) ws "are"i ws ) Setable ( ":" ws )
-      / (_) s:Setable ( ws "are" ws
+      / (_) Setable ( ws "are" ws
           ( (
               ( "the following"i / "these"i )
             / a ws arrayLiteral ws "containing"i
@@ -958,7 +1012,7 @@ VarStatement
       return buildLetStatement( s[ 1 ], {
         "type": "ArrayExpression",
         "elements": vals
-      } )
+      } );
     }
 
 EqualKW
@@ -1013,18 +1067,19 @@ Called // Related: CallIt
 // --- DEFINING FUNCTIONS ---
 
 DefineFunction
-  = DefineMethod /
+  = DefineGetFunction /
+    DefineMethod /
     DefineConstructor /
     FunctionStatement /
-    DefineGetFunction /
     DefineSimpleGetFunction /
     PrototypeInherit /
     ConstructorDuplicate
 
 FunctionStatement
-  = ("to do"i ws/"to"i ws) id:SimpleId params:ParamGroup
+  //= ("to do"i ws/"to"i ws) id:SimpleId params:ParamGroup
+  = ("to do"i ws/"to"i ws) id:MultiwordVarLoose params:ParamGroup
   ( ":" ws / "," ws / ws "is to" ws )
-  !{ startFunction(); } s:PhraseGroupGroup
+  !{ startFunction( { id: id } ); } s:PhraseGroupGroup
   {
     return buildFunctionStatement( id, params, s );
   }
@@ -1035,12 +1090,12 @@ DefineConstructor
       ( ( "When"i / "Every time"i ) ws type:TypeEntity ws "is" ws CreatedKW { return type; } )
     )
     params:ParamGroupRequirePreposition "," ws
-    !{ startFunction( { thisAlias: type, rememberThis: true } ); }
+    !{ startFunction( { thisAlias: type, rememberThis: true, id: constructorFormat( type ) } ); }
     s:PhraseGroupGroup
     {
       type = constructorFormat( type );
-      var fnStatement = buildFunctionStatement( constructorFormat( type ), params, s ),
-        pre = findVar( constructorFormat( type ).name );
+      var fnStatement = buildFunctionStatement( type, params, s ),
+        pre = findVar( type.name );
       if ( pre && pre.type === "undefined-constructor" ) {
         fillFunction( pre.node, fnStatement );
         return [];
@@ -1087,7 +1142,7 @@ PrototypeOrValue // Needs to return an array, a "this" alias, and a value.
       return { extras: r,  val: val, alias: type };
     }
   / val:PropGet {
-      return { extras: [], val: val, alias: val.property }
+      return { extras: [], val: val, alias: val.property };
     }
   / val:Identifier {
       return { extras: [], val: val, alias: val };
@@ -1096,7 +1151,7 @@ PrototypeOrValue // Needs to return an array, a "this" alias, and a value.
 DefineGetFunction
   = "to get"i ws id:Identifier ws "of" params:ParamGroupNoPreposition
   ( "," / ":" ) ws
-  !{ startFunction( { expectReturn: id.name } ); }
+  !{ startFunction( { expectReturn: id.name, id: id } ); }
   s:PhraseGroupGroup
   //!{ popContext(); returned = false; }
   {
@@ -1168,13 +1223,14 @@ ConstructorDuplicate
 
 // TODO: Only allow preps after objects.
 ParamGroup // TODO: Only allow "and" after first param.
-  = s:( ( ( ws "and" )? ( ws ArgPreposition / "" ) ) ( SingleParam ) )* {
-    return extractList( s, 1 );
+//  = s:( ( ( ws "and" )? ( ws ArgPreposition / "" ) ) ( SingleParam ) )* {
+  = noprep:ParamGroupNonPrepositional? prep:ParamGroupRequirePreposition {
+    return ( noprep || [] ).concat( prep );
   }
 
 // For constructors. Can't have "When making a X Y".
 ParamGroupRequirePreposition
-  = params:( s:ParamGroupPrepGroup ss:( ( ws "and" ) ParamGroupPrepGroup )* {
+  = params:( s:ParamGroupPrepGroup ss:( ( ws "and" )? ParamGroupPrepGroup )* {
       return s.concat( ...ss.map( x => x[ 1 ] ) );
     } )? {
       return params || [];
@@ -1187,7 +1243,12 @@ ParamGroupPrepGroup
 
 // Only use this for "ofs", too greedy otherwise.
 ParamGroupNoPreposition
-  = s:SingleParam ss:( ( ( "," )? ws "and" / "," ) ( SingleParam ) )* {
+  = s:SingleParam ss:( ( ( "," )? ws "and" / "," ) SingleParam )* {
+    return buildList( s, ss, 1 );
+  }
+
+ParamGroupNonPrepositional // Issue: Anything after "and" can't be a returnvalname anyway.
+  = s:SingleParam ss:( ( ws "and" )? SingleParam )* {
     return buildList( s, ss, 1 );
   }
 
@@ -1249,14 +1310,21 @@ ArgGroupNoPreposition // Specifically for "of"s, doesn't allow indirect objects.
     return buildList( s, ss, 1 );
   }
 
-// TODO: Add !MathOps & co, to allow "X y plus z."
-// TODO: Shouldn't allow "and" before the first arg.
 ArgGroupNonPrep
-  = s:( $( ( ws "and" )? !( ws ArgPreposition ) ) ( SimpleConstructor / SingleArg ) )* {
-    var r;
-    s.some( y => r = !y[ 0 ] && y[ 1 ].type === "NewExpression" && y[ 1 ] );
-    return { varBind: r, args: s.map( x => x[ 1 ] ) };
-  }
+  = argGroups:(
+      !( ws ArgPreposition )
+      s:( SimpleConstructor / SingleArg )
+      ss:( ( ( ws "and" ) !( ws ArgPreposition ) ) ( SimpleConstructor / SingleArg ) )*
+      { return buildList( s, ss, 1 ); }// [ s ].concat( ss.map( sss => sss[ 1 ] ) );
+    )*
+    {
+      var r, allArgs = [].concat( ...argGroups );
+
+      argGroups.some( argGroup => r = !argGroup[ 1 ] && argGroup[ 0 ].type === "NewExpression" && argGroup[ 0 ] );
+
+      return { varBind: r, args: allArgs };
+    }
+  / '' { return { args: [] }; }
 
 // "with x and with y"
 ArgGroupRequirePreposition
@@ -1289,6 +1357,7 @@ PostPrepArg
 SingleArg
   = ws !("and" ws) s:( SimpleConstructor / Value ) { return s }
 
+// Unused.
 SingleArgNoPreposition
   = ws !( "and" ws ) s:Value {
       return { mayReturn: true, val: s };
@@ -1301,7 +1370,7 @@ ArgPreposition
 
 DoAction
 = ("do"i ws)?
-  s:SimpleId args:ArgGroup p:PostIfWhile
+  s:MultiwordVarStrict args:ArgGroup p:PostIfWhile
   {
     var f = {
       "type": "CallExpression",
@@ -1354,11 +1423,14 @@ SimpleConstructor
 // TODO: "Get X of Y, call it Z." "Get X of Y."
 
 CallGetFunction
-  = id:Identifier ws "of" args:ArgGroupNoPreposition { return {
-    "type": "CallExpression",
-    "callee": id,
-    "arguments": args
-  }; }
+  = id:Identifier ws "of" args:ArgGroupNoPreposition {
+      id = ofAlias( id );
+      return {
+        "type": "CallExpression",
+        "callee": id,
+        "arguments": args
+      };
+    }
 
 DoNothing
   = ( "do nothing"i / ( "don't"i / "do not"i ) ws Statement ) { return []; }
@@ -1481,7 +1553,7 @@ stringNumberBaseTenUnit // 'twen' + -'ty' / -'tieth'
     / 'nine'i
   ) {
     return ( 'twen|thir|for|fif|six|seven|eigh|nine'
-      .split( '|' ).indexOf( t.toString().toLowerCase() ) + 2 ) * 10
+      .split( '|' ).indexOf( t.toString().toLowerCase() ) + 2 ) * 10;
   }
 
 stringNumberBaseHundred
@@ -1600,7 +1672,8 @@ StringType = ( "string" / "sentence" / "phrase" / "word" / "text" )
 // --- IDENTIFIERS, PROPERTIES ---
 
 Identifier
-  = v:Pronoun / The? v:SimpleId {
+  = Pronoun
+  / The? v:SimpleId {
     //return { "type": "Identifier", "name": text().replace( ' ', '_' ) };
     maybeRemember( v );
     return v;
@@ -1681,17 +1754,35 @@ AccessIdent // Unused
 // Should work with Setable/pronouns/etc.
 // Currently unused.
 MultiwordVarLoose
-  = The? v:$( [A-Za-z_]+ ) l:( ws (!Keyword ) MultiwordVarLoose )? {
-    //return v;
+  = The? v:MWVLPart {
+    return v;
+  }
+
+MWVLPart
+  = v:$( [A-Za-z_]+ ) l:( ws !( !The Keyword / a WordBreak ) MWVLPart )? {
     var name = nonConstructorFormat( v ) + ( l ? constructorFormat( l[ 2 ] ).name : '' );
     return getAlias( name ) || buildIdentifier( name );
   }
 
+// Only match previously established multi-word variables.
+// Requires a different model than loose. Can be used for some calls.
+// Still unclear what to do for x.y();s, unless those are also tracked.
 MultiwordVarStrict
-  = The? v:[A-Za-z_]+ l:( ws (!Keyword ) MultiwordVarStrict )? {
-    var name = nonConstructorFormat( v ) + constructorFormat( l[ 2 ] );
+  = The? start:( t:$[A-Za-z_]+ { return nonConstructorFormat( t ); } ) name:(
+      // TODO: Rewrite this.
+        p1:MWVSPart p2:MWVSPart p3:MWVSPart &{ return hasVar( start + p1 + p2 + p3 ); }
+          { return start + p1 + p2 + p3; }
+      / p1:MWVSPart p2:MWVSPart &{ return hasVar( start + p1 + p2 ); }
+            { return start + p1 + p2; }
+      / p1:MWVSPart &{ return hasVar( start + p1 ); }
+            { return start + p1; }
+      / "" { return start; }
+    )? {
     return getAlias( name ) || buildIdentifier( name );
   }
+
+MWVSPart
+  = ws ( &The / !Keyword ) c:$[A-Za-z_]+ { return constructorFormat( c ); }
 
 // --- WHITESPACE, COMMENTS ---
 
@@ -1707,7 +1798,6 @@ NoteBlockPoint
   = "*" [^\n]+
 
 SoThat // TODO: Consider allowing just "so". Problem with that: "so long as".
-  //= ws "so"i ws "that"i ws [^,;\.]+
   = ws "so"i ws "that"i ws [^,;\.]+
 
 // - Whitespace

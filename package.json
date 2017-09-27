@@ -5,7 +5,8 @@
   "scripts": {
     "test": "mocha",
     "build": "pegjs -o parser.js --format es englsh.pegjs",
-    "pack": "rollup -c"
+    "pack": "rollup -c",
+    "cbuild": "npm run build && npm run pack"
   },
   "repository": {
     "type": "git",
