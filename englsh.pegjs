@@ -119,9 +119,8 @@
     loop( body );
     return returnParam;
   }
-  
+
   function buildFunctionStatement( id, params, body, isExpression ) {
-    // TODO: addVar( name.name ) one context level up.
 
     // TODO: This shouldn't run for constructors, or indirect-object arguments.
     var RParam = getReturnParam( params, body );
@@ -318,7 +317,12 @@
   function setAlias( alias, value ) {
     getContext().aliases[ alias ] = value;
   }
-  function getAlias( alias, value ) {
+  /**
+   * Resolve aliases (such as those for constructorname>"this") to the node.
+   * @param {string} alias
+   * @return {object}
+   */
+  function getAlias( alias ) {
     // Should this search in the order direction? (More specific first.)
     for ( var i = 0; i < contextStack.length; i++ ) {
       var aliases = contextStack[ i ].aliases;
@@ -354,7 +358,12 @@
 
     // If an ID is supplied, mark it as a variable with type 'function' in the outer context.
     if ( options && options.id ) {
-      addVar( options.id.name, { type: 'function' } );
+      var existingVar = findVar( options.id.name );
+      if ( existingVar ) {
+        existingVar.type = 'function';
+      } else {
+        addVar( options.id.name, { type: 'function' } );
+      }
     }
 
     // (This line needs to be before aliases, because setAlias operates on the current context.)
@@ -440,7 +449,7 @@
       };
       // Next, prepare things so that this function can be simply overridden by
       // later definition. (This will be done with fillFunction.)
-      addVar( constructor.name, { "type": "undefined-constructor", node: fnDef } );
+      addVar( constructor.name, { "type": "undefined-constructor", "undefinedConstructor": true, node: fnDef } );
       returnValue.push( fnDef );
     }
 
@@ -769,16 +778,17 @@ MathSetter
      } ) ); }
 
 MathSetterBinaryOp
+  // TODO: Lots of rewriting here, to support .pushUnique as "add". Also, "remove".
   // Maybe also allow "Make X Y more than before"? Would interfere with var.
   = ("Increment"i/"Increase"i) ws s:Setable ws "by" ws v:Value
       { return {s,v,op:"+="}; }
-  / "Add"i ws v:Value ws "to" ws s:Setable { return {s,v,op:"+="}; }
+  / "Add"i      ws v:Value ws "to" ws s:Setable { return {s,v,op:"+="}; }
   / ("Decrement"i/"Decrease"i) ws s:Setable ws "by" ws v:Value
       { return { s, v, op: "-=" }; }
   / "Subtract"i ws v:Value ws "from" ws s:Setable
       { return { s, v, op: "-=" }; }
   / "Multiply"i ws s:Setable ws "by" ws v:Value { return {s,v,op:"*="}; }
-  / "Divide"i ws s:Setable ws "by" ws v:Value { return {s,v,op:"/="}; }
+  / "Divide"i   ws s:Setable ws "by" ws v:Value { return {s,v,op:"/="}; }
 
 MathSetterUnaryOp
   = ("Increment"i/"Increase"i) ws s:Setable { return {s, op:"++"}}
@@ -790,13 +800,18 @@ MultiplicativeExpression
     { return buildBinaryExpression(head, tail); }
 
 MultiplicativeOperator
-  = ("multiplied by"/"times"/"*") { return "*"; }
-  / ("divided by"/"over"/"/")     { return "/"; }
+  = ("multiplied by"/"times"/"*"/"×") { return "*";  }
+  / ("divided by"/"over"/"/"/"÷")     { return "/";  }
+    // TODO: Split this off, to avoid bracketing messes.
+  / ("to the power of")               { return "**"; }
 
 AdditiveExpression
   = head:MultiplicativeExpression
     tail:(ws AdditiveOperator ws MultiplicativeExpression)*
-    { return buildBinaryExpression(head, tail); }
+    {
+
+      return buildBinaryExpression(head, tail);
+    }
 
 AdditiveOperator // "Added to"?
   = ("plus"/"more than"/"+")  { return "+"; }
@@ -804,6 +819,15 @@ AdditiveOperator // "Added to"?
   // Concatenation. Should probably be handled differently, to
   // force toString: x followed by y > '' + x + y;
   / "followed by" { return "+"; }
+
+// WIP.
+TestAdditiveOperator // "Added to"?
+  = ("plus"/"more than"/"+")  { return ( left, right ) => [ left, "+", right ]; }
+  / ("minus"/"-")  { return ( left, right ) => [ left, "+", right ]; }
+  / ("less than")  { return ( left, right ) => [ right, "-", left ]; }
+  // Concatenation. Should probably be handled differently, to
+  // force toString: x followed by y > '' + x + y;
+  / "followed by" { return ( left, right ) => [ left, "+", right ]; }
 
 // --- IF, WHILE, QUESTIONS ---
 // TODO: Consider moving this above Conditions.
@@ -954,7 +978,12 @@ LetStatement
   }
 
 // Lotsa duplication here, but I can't figure out any other way to do this.
-// TODO: Array.pushUnique(), "Make x one of the ys."
+// TODO: Array.pushUnique(), "Make x one of the ys." Can't use the same patten,
+// since "Make x's y one of the zs." is valid. Maybe split off to its own thing.
+// However, there's a lot of overlap. "X's y is one of the zs."
+// TODO: Vocab. "Add x to the zs.", "Remove x from the zs." "X is not/no longer one of the zs."
+// Consider "X and y are zs.", "Make x and y equal z.", "X and y are both [equal to] z".
+// "Set [both] x's y and w to z.", "X, y, and z are a group, which we'll call w."
 VarStatement
   = l:(
       ( "let"i ws )
@@ -964,9 +993,7 @@ VarStatement
         Setable ( ws ( "equal to" ) ws / EqualKW / ws ) CValue
           ( And Setable ( ws ( "equal to" ) ws / EqualKW / ws ) CValue )* /
       ( "set"i ws )
-        // Setable ( ws ( "to be" / "to equal" / "to" / "as" ) ws ) CValue
         Setable ( ws "to" ( EqualKW / ws ) / ws "as" ws ) CValue
-          // ( And Setable ( ws ( "to be" / "to equal" / "to" / "as" ) ws ) CValue )* /
           ( And Setable ( ws "to" ( EqualKW / ws ) / ws "as" ws ) CValue )* /
       ( "have"i ws )
         Setable EqualKW CValue
@@ -1076,7 +1103,6 @@ DefineFunction
     ConstructorDuplicate
 
 FunctionStatement
-  //= ("to do"i ws/"to"i ws) id:SimpleId params:ParamGroup
   = ("to do"i ws/"to"i ws) id:MultiwordVarLoose params:ParamGroup
   ( ":" ws / "," ws / ws "is to" ws )
   !{ startFunction( { id: id } ); } s:PhraseGroupGroup
@@ -1086,8 +1112,8 @@ FunctionStatement
 
 DefineConstructor
   = type:(
-      ( ( "When"i ws CreatingKW / "To"i ws CreateKW ) ws type:TypeEntity { return type; } ) /
-      ( ( "When"i / "Every time"i ) ws type:TypeEntity ws "is" ws CreatedKW { return type; } )
+      ( ( "When"i ws CreatingKW / "To"i ws CreateKW ) ws type:TypeEntitySet { return type; } ) /
+      ( ( "When"i / "Every time"i ) ws type:TypeEntitySet ws "is" ws CreatedKW { return type; } )
     )
     params:ParamGroupRequirePreposition "," ws
     !{ startFunction( { thisAlias: type, rememberThis: true, id: constructorFormat( type ) } ); }
@@ -1096,7 +1122,8 @@ DefineConstructor
       type = constructorFormat( type );
       var fnStatement = buildFunctionStatement( type, params, s ),
         pre = findVar( type.name );
-      if ( pre && pre.type === "undefined-constructor" ) {
+      if ( pre && pre.undefinedConstructor === true ) {
+        pre.undefinedConstructor = false;
         fillFunction( pre.node, fnStatement );
         return [];
       } else {
@@ -1111,7 +1138,7 @@ DefineMethod
       "For"i ws type:PrototypeOrValue ws "to" { return type; } /
       "To have"i ws type:PrototypeOrValue { return type; }
     )
-  ws method:SimpleId params:ParamGroup ( "," / ":" ) ws
+  ws method:MultiwordVarLoose params:ParamGroup ( "," / ":" ) ws
   !{ startFunction( { thisAlias: type.alias, rememberThis: true } ); }
   s:PhraseGroupGroup
   {
@@ -1126,11 +1153,14 @@ DefineMethod
       },
       "right": buildFunctionStatement( method, params, s, true )
     } );
+
+    // TODO: Add data to findVar( type ) regarding names existence, for multiwords.
+
     return type.extras.concat( q );
   }
 
 PrototypeOrValue // Needs to return an array, a "this" alias, and a value.
-  = type:TypeEntity {
+  = type:TypeEntityGet {
       var constructor = constructorFormat( type );
       var r = constructorFallbackDefault( constructor );
       var val = {
@@ -1149,7 +1179,7 @@ PrototypeOrValue // Needs to return an array, a "this" alias, and a value.
     }
 
 DefineGetFunction
-  = "to get"i ws id:Identifier ws "of" params:ParamGroupNoPreposition
+  = "to get"i ws The? id:MultiwordVarLoose ws "of" params:ParamGroupNoPreposition
   ( "," / ":" ) ws
   !{ startFunction( { expectReturn: id.name, id: id } ); }
   s:PhraseGroupGroup
@@ -1159,8 +1189,8 @@ DefineGetFunction
   }
 
 DefineSimpleGetFunction // Maybe solidifyRemember here.
-  = id:Identifier ws "of" args:ParamGroupNoPreposition ws "is" ws
-  !{ startFunction(); }
+  = The? id:MultiwordVarLoose ws "of" args:ParamGroupNoPreposition ws "is" ws
+  !{ startFunction( { id: id } ); }
   v:CValue
   // Should args be remembered?
   {
@@ -1178,10 +1208,11 @@ PrototypeValue // Is this really necessary?
 PrototypeInherit
   // Should this attach this.call( parentClass ) to the function body?
   // (Completely possible to do, without much difficulty.)
+  // Actually, should this use classes and extends?
   // Long-term TODO: ", which is ...".
   // TODO: "Every X is a y". (Maybe just change/fork TypeEntity, bc that might
   // also apply to other uses.)
-  = type:TypeEntity ws "is" ws a ( ws ( "kind" / "type" ) ws "of" )? ws parent:SimpleId {
+  = type:TypeEntitySet ws "is" ws a ( ws ( "kind" / "type" ) ws "of" )? ws parent:MultiwordVarStrictConstructor {
     type = constructorFormat( type );
 
     var xx = buildExpressionStatement( {
@@ -1215,15 +1246,13 @@ PrototypeInherit
   }
 
 ConstructorDuplicate
-  = type:TypeEntity ws "is the same thing as" ws targetType:TypeEntity {
+  = type:TypeEntitySet ws "is the same thing as" ws targetType:TypeEntityGet {
       return buildLetStatement( constructorFormat( type ), constructorFormat( targetType ) );
     }
 
 // - ARGUMENTS, PARAMETERS
 
-// TODO: Only allow preps after objects.
-ParamGroup // TODO: Only allow "and" after first param.
-//  = s:( ( ( ws "and" )? ( ws ArgPreposition / "" ) ) ( SingleParam ) )* {
+ParamGroup
   = noprep:ParamGroupNonPrepositional? prep:ParamGroupRequirePreposition {
     return ( noprep || [] ).concat( prep );
   }
@@ -1252,7 +1281,7 @@ ParamGroupNonPrepositional // Issue: Anything after "and" can't be a returnvalna
     return buildList( s, ss, 1 );
   }
 
-SingleParam
+SingleParam // TODO: addVar this.
   = ws ( "a thing" / "something" / "someone" )
     name:ParamName?
     {
@@ -1260,7 +1289,7 @@ SingleParam
       maybeRemember( s );
       return s;
     }
-  / ws type:TypeEntity name:ParamName? {
+  / ws type:TypeEntitySet name:ParamName? {
       var s = name || type;
       // TODO: Actual type check.
       maybeRemember( s );
@@ -1344,18 +1373,18 @@ ArgGroupPrepGrouping
     }
 
 // To consider: "X as the Y".
-SingleArgWithPreposition
-  = ws ArgPreposition ws s:( ( !( a ws ) ) Identifier ws s:Value { return s; } / SimpleConstructor / Value ) {
+SingleArgWithPreposition // TODO: Allow multi-word. Needs to work for both "with the name Bob" and "with the chocolate cake".
+  = ws ArgPreposition ws s:( ( !( a WordBreak ) ) Identifier ws s:Value { return s; } / SimpleConstructor / Value ) {
       return s;
     }
 
 PostPrepArg
-  = ws s:( !( a ws ) Identifier ws s:Value { return s; } / Value ) {
+  = ws s:( !( a WordBreak ) Identifier ws s:Value { return s; } / Value ) {
       return s;
     }
 
 SingleArg
-  = ws !("and" ws) s:( SimpleConstructor / Value ) { return s }
+  = ws !( "and" WordBreak ) s:( SimpleConstructor / Value ) { return s }
 
 // Unused.
 SingleArgNoPreposition
@@ -1403,8 +1432,8 @@ HaveOrder
     }
 
 // Only for actually building.
-Constructor
-  = a ws id:RawSimpleId args:ArgGroupRequirePreposition { return {
+Constructor // TODO: Use TypeEntityGet?
+  = a ws id:MultiwordVarStrictConstructor args:ArgGroupRequirePreposition { return {
       "type": "NewExpression",
       "callee": constructorFormat( id ),
       "arguments": args,
@@ -1423,7 +1452,7 @@ SimpleConstructor
 // TODO: "Get X of Y, call it Z." "Get X of Y."
 
 CallGetFunction
-  = id:Identifier ws "of" args:ArgGroupNoPreposition {
+  = The? id:MultiwordVarStrict ws "of" args:ArgGroupNoPreposition {
       id = ofAlias( id );
       return {
         "type": "CallExpression",
@@ -1646,7 +1675,7 @@ compositeLiteral
 compositeLiteralType
   = c:compositeLiteral { return buildIdentifier( c.type ); }
 
-CompositeLiteralConstructor
+CompositeLiteralConstructor // TODO: Allow "containing" for arrays.
   = a ws c:compositeLiteral { return c.init; }
 
 arrayLiteral
@@ -1663,6 +1692,12 @@ a
 
 TypeEntity
   = a ws type:SimpleId { return type; }
+
+TypeEntitySet
+  = a ws type:MultiwordVarLoose { return type; }
+
+TypeEntityGet
+  = a ws type:MultiwordVarStrictConstructor { return type; }
 
 PrimitiveType = NumberType / StringType
 NumberType = ( "number" / "amount" / "quantity" ) { return "number"; }
@@ -1689,7 +1724,7 @@ SimpleId // Should these accept numbers in non-initial characters?
 
 RawSimpleId
   = !( Keyword ( [^A-Za-z_] / !. ) )
-    v:$([A-Za-z_]+) {
+    v:$([A-Za-z_]  [A-Za-z0-9_]*) {
       var name = nonConstructorFormat( v );
       return buildIdentifier( name );
     }
@@ -1706,7 +1741,9 @@ Keyword
   = ( IfKW / WhileKW / ArgPreposition / "do"i / "otherwise"i / "and"i / "or"i / "make"i /
       "have"i / "set"i / "the"i / "get"i / "is"i / "does" / "doesn't" / "exist" /
       "exists" / MathCompareKeyword / "equals" / "equal" / "as" / "same" /
-      "for"i / "then"i / "so"i
+      // Currently unused, but will probably be used for something.
+      "for"i /
+      "then"i / "so"i / "of"i
     )
 
 Pronoun // PROBLEM: "her" is ambiguous from possessive. Breaks for example, To eat a person, have her bah. TODO.
@@ -1752,23 +1789,17 @@ AccessIdent // Unused
 
 // WIP. Should notice issues, and notice when hitting a full existing var name.
 // Should work with Setable/pronouns/etc.
-// Currently unused.
 MultiwordVarLoose
-  = The? v:MWVLPart {
-    return v;
-  }
-
-MWVLPart
-  = v:$( [A-Za-z_]+ ) l:( ws !( !The Keyword / a WordBreak ) MWVLPart )? {
+  = v:$( [A-Za-z_]+ ) l:( ws !( !The Keyword / a WordBreak ) MultiwordVarLoose )? {
     var name = nonConstructorFormat( v ) + ( l ? constructorFormat( l[ 2 ] ).name : '' );
-    return getAlias( name ) || buildIdentifier( name );
+    return buildIdentifier( name );
   }
 
 // Only match previously established multi-word variables.
 // Requires a different model than loose. Can be used for some calls.
 // Still unclear what to do for x.y();s, unless those are also tracked.
 MultiwordVarStrict
-  = The? start:( t:$[A-Za-z_]+ { return nonConstructorFormat( t ); } ) name:(
+  = start:( t:$[A-Za-z_]+ { return nonConstructorFormat( t ); } ) name:(
       // TODO: Rewrite this.
         p1:MWVSPart p2:MWVSPart p3:MWVSPart &{ return hasVar( start + p1 + p2 + p3 ); }
           { return start + p1 + p2 + p3; }
@@ -1778,7 +1809,22 @@ MultiwordVarStrict
             { return start + p1; }
       / "" { return start; }
     )? {
-    return getAlias( name ) || buildIdentifier( name );
+    return buildIdentifier( name );
+  }
+
+
+MultiwordVarStrictConstructor
+  = start:( t:$[A-Za-z_]+ { return constructorFormat( t ); } ) name:(
+      // TODO: Rewrite this.
+        p1:MWVSPart p2:MWVSPart p3:MWVSPart &{ return hasVar( start + p1 + p2 + p3 ); }
+          { return start + p1 + p2 + p3; }
+      / p1:MWVSPart p2:MWVSPart &{ return hasVar( start + p1 + p2 ); }
+            { return start + p1 + p2; }
+      / p1:MWVSPart &{ return hasVar( start + p1 ); }
+            { return start + p1; }
+      / "" { return start; }
+    )? {
+    return buildIdentifier( name );
   }
 
 MWVSPart

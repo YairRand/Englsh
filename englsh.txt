@@ -408,7 +408,7 @@ Array.pushUnique = Array.pushUnique || function ( x ) {
   return ( this.includes( x ) || this.push( x ) ), x;
 };
 //
-- Make x the number of squiggles that are greater than 5.
+- Make x the number [/quantity?] of squiggles that are greater than 5.
 > x = squiggles.filter( x => x > 5 ).length;
 - For each of the squiggles, x.
 > squiggles.forEach( x );
@@ -527,7 +527,6 @@ Unsure about prefixing. Maybe just this:
 // Slots still can't be accessed by variable, only by explicit number.
 // TODO: Allow "3 quarters", by directly allowing integers in stringcardinals.
 // Should probably replace the ws-and-ws with And.
-// check out istanbul
 // TODO: less than as subtraction
 // TODO: Have identifier add underscores to actual js keywords when attempting to use as ids.
 
@@ -541,3 +540,9 @@ Unsure about prefixing. Maybe just this:
 // Same for "follows", which implies toString for numbers.
 
 // "The result of y is z. Make b the result of y."
+
+// WIP: Multi-word vars.
+// WORKING FOR: Constructor, functions (except methods calls), (some?) params,
+// NOT WORKING: Arguments, regular variables, most else.
+
+// TODO: Fix keyword checks, so that, for example, "off" isn't blocked because of "of".

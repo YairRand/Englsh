@@ -6,7 +6,8 @@
     "test": "mocha",
     "build": "pegjs -o parser.js --format es englsh.pegjs",
     "pack": "rollup -c",
-    "cbuild": "npm run build && npm run pack"
+    "cbuild": "npm run build && npm run pack",
+    "watch": "rollup -c -w"
   },
   "repository": {
     "type": "git",

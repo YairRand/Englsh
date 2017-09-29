@@ -86,6 +86,8 @@ describe( 'Variables', function() {
       'var x = y - z;': [
         'Have x equal y minus z.',
         'X is equal to y - z.'
+        // TODO:
+        // 'X is equal to z less than y.'
       ],
       'var x = y * z;': [
         'Make x y times z.',
@@ -347,7 +349,16 @@ describe( 'Functions', function() {
       'function foreverIncrement(number) {foreverIncrement(number + 1);}': [
         'To forever increment a number, forever increment the number plus one.'
       ],
+      'function happyVersion(word) {return word + " :)";}console.log(happyVersion("foo"))': [
+        'The happy version of a word is the word followed by " :)". Have the console log the happy version of "foo".'
+      ],
+      // TODO: Have calling work.
+      'x.yZ = function yZ(){b();}': [
+        'For X to y z, b.'
+      ]
     }
+
+    // TODO eventually: "To x a number, b. To x a string, c."
 
   } );
 
@@ -601,7 +612,8 @@ describe( 'Constructors', function () {
     },
     'prototype inheritence': {
       'function X() {b();}X.prototype = Object.create(Y.prototype);': [
-        'When creating an x, b. An x is a y.'
+        'When creating an x, b. An x is a y.',
+        'An x is a y. When creating an x, b.'
       ]
     },
     'should create default constructor': {
@@ -626,11 +638,26 @@ describe( 'Constructors', function () {
     'should support attaching methods': {
       'function X() {y();}X.prototype.y = function y() {z();};': [
         'To create an x, y. For an x to y, z.',
-        'To create an x, y. To have an x y, z.'
+        'To create an x, y. To have an x y, z.',
+        'To have an x y, z. To create an x, y.'
       ],
       'function X() {y();}X.prototype.y = function y() {this.z();};': [
         'To create an x, y. For an x to y, have it z.',
         'To create an x, y. To have an x y, have the x z.'
+      ]
+    },
+    'should support multi-word constructor names': {
+      'function XY() {z();}var xY = new XY();': [
+        'To create a x y, z. Create a x y.'
+      ],
+      // TODO: Multiword args.
+      /*
+      'function XY(bC) {z(bC);}var xY = new XY(w);': [
+        'To create a x y with a b c, z the b c. Create a x y with w.'
+      ],
+      */
+      'function ZW() {b();}function XY() {b();}XY.prototype = Object.create(ZW.prototype);': [
+        'To make a z w, b. A x y is a z w. To make a x y, b.'
       ]
     }
   } );
